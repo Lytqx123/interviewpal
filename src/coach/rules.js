@@ -199,15 +199,16 @@ export function directionDeviationByRules(session) {
 }
 
 // 规则兜底：困难题识别
+// 配对：answers[i] 回答的是 questions[i]（Q0→A0→Q1→A1...），故困难题取 questions[i]。
 export function difficultQuestionsByRules(session) {
   const answers = extractAnswers(session.turns);
   const questions = extractQuestions(session.turns);
   const difficult = [];
   answers.forEach((ans, i) => {
     if (!ans || ans.length < 10) {
-      difficult.push({ question: questions[i + 1] ?? questions[i] ?? '', category: 'noAnswer', notes: '回答过短或未作答' });
+      difficult.push({ question: questions[i] ?? '', category: 'noAnswer', notes: '回答过短或未作答' });
     } else if (countMatches(ans, HESITATION_WORDS) >= 2) {
-      difficult.push({ question: questions[i + 1] ?? questions[i] ?? '', category: 'shallow', notes: '回答含较多犹豫词，可能理解不深' });
+      difficult.push({ question: questions[i] ?? '', category: 'shallow', notes: '回答含较多犹豫词，可能理解不深' });
     }
   });
   return difficult;
@@ -293,4 +294,112 @@ export function nextFocusByRules(scores) {
   if (lowDims.length) return lowDims.map((d) => `重点强化${d}`);
   const midDims = Object.entries(scores).filter(([, s]) => s === 3).map(([d]) => SCORE_RUBRIC[d].name);
   return midDims.length ? midDims.map((d) => `继续提升${d}`) : ['保持当前水平，挑战更高难度问题'];
+}
+
+// ============ 阶段七：记忆闭环（跨场次对比） ============
+// 联网调研依据：Learning Loop（反思巩固学习）、三层复盘法第二层"跨多次练习趋势对比"、
+// nowcoder"某类问题反复出现/某环节总翻车，闭环了才叫复盘"。
+// 以下纯函数不依赖档案库，便于单测；由 memory.js 编排层串联。
+
+// 提取 session 中的面试官问题（供重复题对比与档案库存储）
+export function extractSessionQuestions(session) {
+  return (session.turns ?? [])
+    .filter((t) => t.role === 'interviewer')
+    .map((t) => ({
+      turnNo: t.turnNo ?? null,
+      content: t.content,
+      focusArea: t.focusArea ?? null,
+    }));
+}
+
+// 重复题对比：用 2-gram 相似度判断当前问题是否在上次也问过（阈值 0.4）。
+// 输出 { repeated, repeatedCount, newCount, total }，repeated 含配对与相似度。
+export function compareRepeatedQuestions(currentQuestions, lastQuestions) {
+  const cur = currentQuestions ?? [];
+  const last = lastQuestions ?? [];
+  const repeated = [];
+  for (const c of cur) {
+    let best = null;
+    for (const l of last) {
+      const sim = bigramOverlap(c.content ?? '', l.content ?? '');
+      if (!best || sim > best.similarity) best = { last: l, similarity: sim };
+    }
+    if (best && best.similarity >= 0.4) {
+      repeated.push({
+        current: c.content,
+        last: best.last.content,
+        similarity: Math.round(best.similarity * 100) / 100,
+      });
+    }
+  }
+  return {
+    repeated,
+    repeatedCount: repeated.length,
+    newCount: cur.length - repeated.length,
+    total: cur.length,
+  };
+}
+
+// 改进项完成率：上次需要改进的维度（high/medium 优先级），这次是否达到 target。
+// 输出 { total, completed, rate, details }，details 逐项含 lastScore/target/currentScore/completed。
+export function improvementCompletionRate(currentScores, lastImprovementList) {
+  const targets = (lastImprovementList ?? []).filter(
+    (i) => i.priority === 'high' || i.priority === 'medium',
+  );
+  if (!targets.length) return { total: 0, completed: 0, rate: 1, details: [] };
+  const details = targets.map((t) => {
+    const dim = t.dimension;
+    const target = t.target ?? 4;
+    const current = currentScores[dim] ?? 0;
+    return {
+      dimension: dim,
+      name: t.name ?? SCORE_RUBRIC[dim]?.name ?? dim,
+      lastScore: t.current ?? null,
+      target,
+      currentScore: current,
+      completed: current >= target,
+    };
+  });
+  const completed = details.filter((d) => d.completed).length;
+  return { total: targets.length, completed, rate: completed / targets.length, details };
+}
+
+// 困难题标注是否上次也卡壳：2-gram 相似度匹配上次困难题（阈值 0.4）。
+// 输出在原困难题上加 alsoStuckLastTime + matchedLastQuestion。
+export function markAlsoStuckLastTime(currentDifficult, lastDifficult) {
+  const last = lastDifficult ?? [];
+  return (currentDifficult ?? []).map((q) => {
+    let matched = null;
+    for (const l of last) {
+      const sim = bigramOverlap(q.question ?? '', l.question ?? '');
+      if (sim >= 0.4) { matched = l; break; }
+    }
+    return {
+      ...q,
+      alsoStuckLastTime: !!matched,
+      matchedLastQuestion: matched?.question ?? null,
+    };
+  });
+}
+
+// 可勾选改进清单：每项加 checked=false；与困难题相关的维度标 priorityRepractice=true。
+// 困难题 category → 维度映射：noAnswer/offTopic→relevance，silence→confidence，shallow→depth。
+const DIFFICULT_CATEGORY_TO_DIM = {
+  noAnswer: 'relevance',
+  offTopic: 'relevance',
+  silence: 'confidence',
+  shallow: 'depth',
+};
+
+export function makeCheckable(improvementList, difficultQuestions) {
+  const difficultDims = new Set();
+  for (const q of difficultQuestions ?? []) {
+    const dim = DIFFICULT_CATEGORY_TO_DIM[q.category];
+    if (dim) difficultDims.add(dim);
+  }
+  return (improvementList ?? []).map((item) => ({
+    ...item,
+    checked: false,
+    priorityRepractice: difficultDims.has(item.dimension),
+  }));
 }

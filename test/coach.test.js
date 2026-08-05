@@ -1,10 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   reviewInterview, compareWithLast, generateReport,
   scoreByRules, improvementByRules, difficultQuestionsByRules, nextFocusByRules, perQuestionReviewByRules,
+  extractSessionQuestions, compareRepeatedQuestions, improvementCompletionRate,
+  markAlsoStuckLastTime, makeCheckable, reviewWithMemory,
   SCORE_RUBRIC, formatReport,
 } from '../src/coach/index.js';
+import { ArchiveStore } from '../src/archive/index.js';
 
 // 构造有对话历史的面试 session（不依赖 interviewer 模块，独立测试 coach）
 function mockSession(answers) {
@@ -233,5 +239,133 @@ describe('复盘教练 · 六维报告', () => {
     const result = await reviewInterview(session);
     const report = generateReport(result, { session });
     assert.ok(report.includes('面试复盘报告'));
+  });
+});
+
+// 临时档案库（记忆闭环测试用，测完自动删）
+function tmpStore(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ip-coach-mem-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return new ArchiveStore(dir);
+}
+
+describe('复盘教练 · 阶段七记忆闭环（跨场次对比）', () => {
+  it('extractSessionQuestions：只提取面试官问题', () => {
+    const qs = extractSessionQuestions(mockSession(GOOD_ANSWERS));
+    assert.equal(qs.length, 3, '3 个面试官问题');
+    assert.ok(qs.every((q) => q.content && q.focusArea), '每题有内容和方向');
+  });
+
+  it('compareRepeatedQuestions：相似题标重复、新题不计', () => {
+    const cur = [
+      { content: '你讲讲订单系统的技术方案吧', focusArea: '项目深挖' },
+      { content: '你平时有什么爱好', focusArea: '闲聊' },
+    ];
+    const last = [
+      { content: '能讲讲你的订单系统技术方案吗', focusArea: '项目深挖' },
+    ];
+    const r = compareRepeatedQuestions(cur, last);
+    assert.equal(r.total, 2, '共 2 题');
+    assert.equal(r.repeatedCount, 1, '1 题重复');
+    assert.equal(r.newCount, 1, '1 题新题');
+    assert.ok(r.repeated[0].similarity >= 0.4, '相似度达标');
+  });
+
+  it('improvementCompletionRate：达标计完成、计算完成率', () => {
+    const lastImprovementList = [
+      { dimension: 'depth', priority: 'high', current: 2, target: 4, name: '专业深度' },
+      { dimension: 'relevance', priority: 'medium', current: 3, target: 4, name: '内容相关性' },
+      { dimension: 'logic', priority: 'maintain', current: 4, target: 4, name: '逻辑结构' },
+    ];
+    const currentScores = { logic: 4, relevance: 3, depth: 4, fluency: 4, interaction: 4, confidence: 4 };
+    const r = improvementCompletionRate(currentScores, lastImprovementList);
+    assert.equal(r.total, 2, '只统计 high/medium（maintain 不算）');
+    assert.equal(r.completed, 1, 'depth 达标 4>=4 完成，relevance 3<4 未完成');
+    assert.equal(r.rate, 0.5, '完成率 50%');
+  });
+
+  it('markAlsoStuckLastTime：相似困难题标"上次也卡壳"', () => {
+    const cur = [{ question: 'Redis 底层原理是什么', category: 'shallow', notes: '浅' }];
+    const last = [{ question: 'Redis 的底层原理', category: 'shallow', notes: '上次也浅' }];
+    const out = markAlsoStuckLastTime(cur, last);
+    assert.equal(out[0].alsoStuckLastTime, true, '相似题标上次也卡壳');
+    assert.ok(out[0].matchedLastQuestion, '有匹配的上次问题');
+    // 不相似的题不标
+    const out2 = markAlsoStuckLastTime([{ question: '完全不同的问题', category: 'noAnswer' }], last);
+    assert.equal(out2[0].alsoStuckLastTime, false, '不相似不标');
+  });
+
+  it('makeCheckable：加 checked 字段、困难题维度标优先重练', () => {
+    const list = [
+      { dimension: 'depth', priority: 'high', suggestion: 'x' },
+      { dimension: 'logic', priority: 'maintain', suggestion: 'y' },
+    ];
+    const difficult = [{ question: 'q', category: 'shallow', notes: '' }]; // shallow→depth
+    const out = makeCheckable(list, difficult);
+    assert.ok(out.every((i) => i.checked === false), '都加 checked=false');
+    assert.equal(out[0].priorityRepractice, true, 'depth 对应困难题 shallow，标优先重练');
+    assert.equal(out[1].priorityRepractice, false, 'logic 无对应困难题');
+  });
+});
+
+describe('复盘教练 · 阶段七记忆闭环（编排层）', () => {
+  it('reviewWithMemory：连续两场，第二场有上次对比+重复题+完成率', async (t) => {
+    const store = tmpStore(t);
+    const company = store.createCompany({ name: '测试公司' });
+    const pos = store.createPosition(company.companyId, { title: '后端工程师', jobType: 'tech' });
+
+    // 第一场：无上次复盘
+    const session1 = mockSession(BAD_ANSWERS);
+    const r1 = await reviewWithMemory(session1, {
+      store, companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1',
+    });
+    assert.equal(r1.lastReview, null, '第一场无上次复盘');
+    assert.ok(r1.record.reviewId, '第一场已写入档案库');
+    assert.equal(store.listReviews({ companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1' }).length, 1, '档案库 1 条记录');
+
+    // 第二场：读上次复盘，做跨场次对比
+    const session2 = mockSession(GOOD_ANSWERS);
+    const replied = [];
+    const r2 = await reviewWithMemory(session2, {
+      store, companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1',
+      reply: (text) => { replied.push(text); return { text }; },
+    });
+    assert.ok(r2.lastReview, '第二场读到上次复盘');
+    assert.ok(r2.result.comparedWithLast, '有与上次对比');
+    assert.ok(r2.result.comparedWithLast.repeatedQuestions, '有重复题对比');
+    assert.ok(r2.result.comparedWithLast.improvementCompletion, '有改进项完成率');
+    // 第二场表现好，改进项应有完成
+    const ic = r2.result.comparedWithLast.improvementCompletion;
+    assert.ok(ic.completed >= 1, `至少 1 项改进完成（实际 ${ic.completed}）`);
+    // 改进清单可勾选
+    assert.ok(r2.result.improvementList.every((i) => 'checked' in i), '改进清单可勾选');
+    // 报告回传飞书
+    assert.equal(replied.length, 1, '报告已回传飞书');
+    assert.ok(replied[0].includes('与上次对比'), '回传报告含与上次对比');
+    // 档案库 2 条记录、轮次次数 2
+    assert.equal(store.listReviews({ companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1' }).length, 2, '档案库 2 条记录');
+    const posAfter = store.getPosition(company.companyId, pos.positionId);
+    assert.equal(posAfter.rounds.round1.completedCount, 2, '轮次次数 2');
+  });
+
+  it('reviewWithMemory：缺 store 报错', async () => {
+    await assert.rejects(
+      () => reviewWithMemory(mockSession(GOOD_ANSWERS), { companyId: 'c1', positionId: 'p1', roundKey: 'round1' }),
+      /store required|store/,
+      '缺 store 抛错',
+    );
+  });
+
+  it('reviewWithMemory：报告含困难题清单（端到端验收核心）', async (t) => {
+    const store = tmpStore(t);
+    const company = store.createCompany({ name: '困难题公司' });
+    const pos = store.createPosition(company.companyId, { title: '后端', jobType: 'tech' });
+    // 故意用含短回答的 session 触发困难题
+    const session = mockSession(['嗯', '', '正常回答'.repeat(20)]);
+    const r = await reviewWithMemory(session, {
+      store, companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1',
+    });
+    assert.ok(r.result.difficultQuestions.length > 0, '识别到困难题');
+    assert.ok(r.report.includes('困难题'), '报告含困难题清单');
   });
 });
