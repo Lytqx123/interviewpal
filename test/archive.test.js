@@ -71,23 +71,28 @@ test('投递快照：投递即冻结、版本可跨公司复用、岗位绑定�
   const c2 = store.createCompany({ name: '公司二' });
   const p1 = store.createPosition(c1.companyId, { title: '后端' });
   const p2 = store.createPosition(c2.companyId, { title: '后端' });
+  const v1 = store.createResumeVersion({ rawText: '简历 v1 全文' });
+  const v2 = store.createResumeVersion({ rawText: '简历 v2 全文' });
 
   const app = store.createApplication(c1.companyId, {
     positionId: p1.positionId,
-    resumeVersionId: 'r_A',
-    resumeSnapshotText: '简历 v1 全文',
+    resumeVersionId: v1.versionId,
   });
-  assert.equal(app.resumeVersionId, 'r_A');
-  assert.equal(store.getApplicationByCompany(c1.companyId).resumeVersionId, 'r_A');
-  assert.equal(store.getPosition(c1.companyId, p1.positionId).resumeVersionId, 'r_A');
+  assert.equal(app.resumeVersionId, v1.versionId);
+  assert.equal(app.resumeVersionNo, 1);
+  assert.equal(app.companyName, '公司一');
+  assert.equal(app.positionTitle, '后端');
+  // 快照自动取版本原文，不用外部再传一份
+  assert.equal(app.resumeSnapshot.text, '简历 v1 全文');
+  assert.equal(store.getApplicationByCompany(c1.companyId).resumeVersionId, v1.versionId);
+  assert.equal(store.getPosition(c1.companyId, p1.positionId).resumeVersionId, v1.versionId);
 
   // 同一家公司再投别的版本：冻结，必须拒绝
   assert.throws(
     () =>
       store.createApplication(c1.companyId, {
         positionId: p1.positionId,
-        resumeVersionId: 'r_B',
-        resumeSnapshotText: '简历 v2',
+        resumeVersionId: v2.versionId,
       }),
     /投递即冻结/,
   );
@@ -95,11 +100,45 @@ test('投递快照：投递即冻结、版本可跨公司复用、岗位绑定�
   // 同一版本投另一家公司：允许
   const app2 = store.createApplication(c2.companyId, {
     positionId: p2.positionId,
-    resumeVersionId: 'r_A',
-    resumeSnapshotText: '简历 v1 全文',
+    resumeVersionId: v1.versionId,
   });
-  assert.equal(app2.resumeVersionId, 'r_A');
+  assert.equal(app2.resumeVersionId, v1.versionId);
   assert.equal(store.listApplications().length, 2);
+
+  // 不存在的版本号直接拒绝，不能凭空造快照
+  assert.throws(
+    () =>
+      store.createApplication(c2.companyId, {
+        positionId: p2.positionId,
+        resumeVersionId: 'ver_not_exist',
+      }),
+    /resume version not found/,
+  );
+});
+
+test('简历版本：创建即不可变、版本号递增、投递不改版本文件', (t) => {
+  const store = tmpStore(t);
+  const v1 = store.createResumeVersion({ rawText: 'v1 全文' });
+  const v2 = store.createResumeVersion({ rawText: 'v2 全文' });
+
+  assert.equal(v1.versionNo, 1);
+  assert.equal(v2.versionNo, 2);
+  assert.equal(v1.immutable, true);
+  assert.equal(store.listResumeVersions().length, 2);
+  assert.equal(store.getLatestResumeVersion().versionId, v2.versionId);
+  assert.throws(() => store.getResumeVersion('../../etc'), /resumeVersionId/);
+
+  // 投递只写 application 文件，版本文件必须保持原样（审计链）
+  const versionFile = path.join(store.root, 'resumes', `${v1.versionId}.json`);
+  const before = fs.readFileSync(versionFile, 'utf8');
+  const company = store.createCompany({ name: '冻结公司' });
+  const pos = store.createPosition(company.companyId, { title: '后端' });
+  store.createApplication(company.companyId, {
+    positionId: pos.positionId,
+    resumeVersionId: v1.versionId,
+  });
+  const after = fs.readFileSync(versionFile, 'utf8');
+  assert.equal(before, after);
 });
 
 test('检索缓存：写入 / 过期清理 / 清空', (t) => {

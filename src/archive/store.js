@@ -9,6 +9,7 @@ import { emptyRounds } from './entities.js';
 // companyId / positionId 只允许这些字符，防止路径穿越。
 const COMPANY_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const POSITION_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+const VERSION_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 /**
  * 档案库（文件存储核心），对应方案书 §5.6 的树状组织 + §5.8 的档案库组件。
@@ -16,6 +17,7 @@ const POSITION_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
  * 目录结构（按公司隔离）：
  *   <root>/
  *     user.json                       全局层：用户画像（跟人走）
+ *     resumes/<versionId>.json        简历版本快照（全局层，创建即不可变，§5.2）
  *     companies/<companyId>/
  *       company.json                  公司画像
  *       positions/<positionId>.json   岗位画像（含轮次状态、次数）
@@ -128,11 +130,58 @@ export class ArchiveStore {
     const data = {
       ...profile,
       version: 1,
+      activeVersionId: profile.activeVersionId ?? null,
       createdAt: profile.createdAt ?? now,
       updatedAt: now,
     };
     this.saveJson(path.join(this.root, 'resume.json'), data);
     return data;
+  }
+
+  // ---------- 简历版本（全局层，版本不可变，§5.2） ----------
+
+  // 版本对象故意不提供 update 接口：想改简历 = 新建版本，旧版本永远保留。
+  // 版本可投多家公司；某公司一旦收到某版本，就绑定该版本（投递即冻结）。
+  createResumeVersion({ rawText, profile = {}, source = 'upload' } = {}) {
+    if (!rawText || typeof rawText !== 'string') {
+      throw new Error('resume rawText required');
+    }
+    // 版本号直接用当前数量 +1；阶段三单用户本地跑，够用，后面并发写再换序列。
+    const versionNo = this.listResumeVersions().length + 1;
+    const version = {
+      version: 1,
+      versionId: newId('ver'),
+      versionNo,
+      immutable: true,
+      source,
+      rawText,
+      rawHash: simpleHash(rawText),
+      charCount: rawText.length,
+      profile,
+      createdAt: new Date().toISOString(),
+    };
+    this.saveJson(path.join(this.root, 'resumes', `${version.versionId}.json`), version);
+    return version;
+  }
+
+  getResumeVersion(versionId) {
+    if (typeof versionId !== 'string' || !VERSION_ID_RE.test(versionId)) {
+      throw new Error(`invalid resumeVersionId: ${versionId}`);
+    }
+    return this.readJson(path.join(this.root, 'resumes', `${versionId}.json`), null);
+  }
+
+  listResumeVersions() {
+    const dir = path.join(this.root, 'resumes');
+    return this.listJsonFiles(dir)
+      .map((file) => this.readJson(file, null))
+      .filter(Boolean)
+      .sort((a, b) => a.versionNo - b.versionNo);
+  }
+
+  getLatestResumeVersion() {
+    const versions = this.listResumeVersions();
+    return versions[versions.length - 1] ?? null;
   }
 
   // ---------- 公司（一层：公司画像） ----------
@@ -283,8 +332,13 @@ export class ArchiveStore {
     if (!positionId || !resumeVersionId) {
       throw new Error('positionId and resumeVersionId required');
     }
+    const company = this.getCompany(companyId);
+    if (!company) throw new Error(`company not found: ${companyId}`);
     const position = this.getPosition(companyId, positionId);
     if (!position) throw new Error(`position not found: ${companyId}/${positionId}`);
+    // 版本必须真实存在：投递快照要从版本取原文，不能凭空造一个版本号。
+    const version = this.getResumeVersion(resumeVersionId);
+    if (!version) throw new Error(`resume version not found: ${resumeVersionId}`);
 
     // 投递即冻结：一家公司一旦绑定某个简历版本，就不能再投其它版本。
     // 版本本身可复用（同一版投多家公司没问题），所以这里只查公司、不查版本。
@@ -292,19 +346,24 @@ export class ArchiveStore {
       throw new Error('company already has an application, 投递即冻结：不可更换简历版本');
     }
 
+    // 没传快照文本时，直接取版本原文做快照——模拟练的就是投出去的那份（§5.2）。
+    const snapshotText = resumeSnapshotText || version.rawText;
     const applicationId = newId('a');
     const now = new Date().toISOString();
     const application = {
       version: 1,
       applicationId,
       companyId,
+      companyName: company.name,
       positionId,
+      positionTitle: position.title,
       resumeVersionId,
+      resumeVersionNo: version.versionNo,
       resumeSnapshot: {
-        text: resumeSnapshotText,
-        charCount: resumeSnapshotText.length,
-        // 先做简单哈希，至少能判断"内容有没有变"；简历解析模块出来后再换正式摘要
-        hash: simpleHash(resumeSnapshotText),
+        text: snapshotText,
+        charCount: snapshotText.length,
+        // 先做简单哈希，至少能判断"内容有没有变"；判断是否同一版看 resumeVersionId
+        hash: simpleHash(snapshotText),
       },
       submittedAt: now,
       immutable: true,

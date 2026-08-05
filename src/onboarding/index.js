@@ -4,12 +4,20 @@ import { enrichResume, enrichJd } from '../enrich/enrich.js';
 
 // onboarding：首次上传/粘贴的完整流水线。
 // 解析 → 建画像 → 存档 → 联网补全入缓存，一条龙。
+export { handleApply, parseApplyCommand } from './apply.js';
 
 export async function handleResumeUpload({ store, llm, search, companyName = null, fileName = null, content }) {
   const resumeProfile = await parseResume(content, { llm });
 
+  // 每次上传都生成一个不可变简历版本（v1/v2...），投递时绑定的是版本不是"当前文件"（§5.2）。
+  const version = store.createResumeVersion({
+    rawText: content,
+    profile: resumeProfile,
+    source: fileName ? 'file' : 'text',
+  });
+
   // 简历画像是全局的（一份简历投多家公司），先存档
-  store.saveResumeProfile(resumeProfile);
+  store.saveResumeProfile({ ...resumeProfile, activeVersionId: version.versionId });
 
   // 用户带了公司名就顺便补全（简历面检索重点：公司/技术，§5.5 round1）
   let companyId = null;
@@ -20,7 +28,7 @@ export async function handleResumeUpload({ store, llm, search, companyName = nul
     enrichment = await enrichResume({ store, search, resumeProfile, companyId, roundKey: 'round1' });
   }
 
-  return { resumeProfile, companyId, enrichment, fileName };
+  return { resumeProfile, version, companyId, enrichment, fileName };
 }
 
 export async function handleJdPaste({ store, llm, search, companyName = null, jdText }) {

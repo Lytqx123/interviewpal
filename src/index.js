@@ -9,4 +9,4 @@ export { createSearchProvider } from './search/provider.js';
 export { enrichResume, enrichJd, collectResumeEntities, collectJdEntities } from './enrich/enrich.js';
 export { detectCommand, helpText } from './feishu/commands.js';
 export { createMessageHandler } from './feishu/handler.js';
-export { handleResumeUpload, handleJdPaste } from './onboarding/index.js';
+export { handleResumeUpload, handleJdPaste, handleApply } from './onboarding/index.js';

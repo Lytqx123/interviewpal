@@ -17,6 +17,12 @@ const COMMANDS = [
     patterns: [/粘贴\s*jd/i, /添加\s*jd/i, /jd\s*粘贴/i, /把jd发给你/, /贴\s*jd/i],
     help: '粘贴 JD：把目标岗位的 JD 文本发给我（可以带公司名，如「粘贴 XX 公司 JD：...」）',
   },
+  {
+    intent: 'apply_company',
+    needs: 'text',
+    patterns: [/投递/, /apply\s*to/i],
+    help: '投递：发送「投递到 公司名 [岗位名]」，可指定简历版本（如「投递 v2 到 星辰科技 产品经理」）；投递即冻结，不可换版本',
+  },
 ];
 
 export function detectCommand(message) {
