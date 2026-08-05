@@ -24,8 +24,22 @@ function describeJobType(jobType) {
   return JOBTYPE_STRATEGY_DESC[jobType] ?? JOBTYPE_STRATEGY_DESC.tech;
 }
 
+// 阶段八：二面业务面上下文块——岗位职责 + 目标公司实际业务 + 联网前沿话题。
+// 这是二面"以岗位职责和公司实际业务为主要参考资料展开"的核心承载。
+function roundContextBlock(roundContext) {
+  if (!roundContext) return '';
+  const { responsibilities = [], companyBusiness = [], frontierTopics = [] } = roundContext;
+  const lines = ['【二面业务面参考资料（主要依据）】'];
+  lines.push(`- 岗位职责：${responsibilities.length ? responsibilities.join('；') : '（未填写，参考 JD 画像）'}`);
+  lines.push(`- 公司实际业务：${companyBusiness.length ? companyBusiness.map((b) => `${b.name}：${b.summary}`).join('；') : '（暂无缓存，结合公开认知展开）'}`);
+  if (frontierTopics.length) {
+    lines.push(`- 联网前沿话题（用于前沿探索/压力题）：${frontierTopics.map((t) => t.topic || t.summary).join('；')}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
 // 开场白 prompt：生成开场白 + 首个问题
-export function buildOpeningPrompt({ resumeProfile, jobProfile, roundKey }) {
+export function buildOpeningPrompt({ resumeProfile, jobProfile, roundKey, roundContext }) {
   return `你是一位经验丰富的面试官，正在面试一位应聘"${jobProfile.title}"岗位的候选人，公司是${jobProfile.companyName ?? '我们公司'}。
 
 【轮次定位】
@@ -33,7 +47,7 @@ ${ROUND_DESC[roundKey] ?? ROUND_DESC.round1}
 
 【岗位类型与追问策略】
 ${describeJobType(jobProfile.jobType)}
-
+${roundKey === 'round2' ? roundContextBlock(roundContext) : ''}
 【候选人简历画像】
 ${JSON.stringify(resumeProfile, null, 2)}
 
@@ -45,7 +59,7 @@ ${JSON.stringify(jobProfile, null, 2)}
 1. 开场白简短自然（1-2 句），提及候选人名字和应聘岗位
 2. 第一个问题以破冰为主（自我介绍或经历概述），不要直接进入深度追问——深度追问留给后续轮次
 3. 一次只问一个问题，不要复合问题
-4. 问题要基于简历画像，自然引入对话
+4. 问题要基于简历画像，自然引入对话${roundKey === 'round2' ? '\n5. 二面开场可结合岗位职责与公司业务引入，但首个问题仍以破冰为主' : ''}
 
 请以 JSON 格式输出：
 {"greeting":"开场白","question":"第一个问题","focusArea":"追问方向","intent":"考察意图"}`;
@@ -64,7 +78,7 @@ ${ROUND_DESC[session.roundKey] ?? ROUND_DESC.round1}
 
 【岗位类型与追问策略】
 ${describeJobType(session.jobType)}
-
+${session.roundKey === 'round2' ? roundContextBlock(session.roundContext) : ''}
 【对话历史】
 ${dialogue}
 
@@ -72,7 +86,7 @@ ${dialogue}
 ${candidateAnswer}
 
 【追问进度】
-当前是第 ${session.depth} 轮追问（共 ${session.maxDepth} 轮）。
+当前是第 ${session.depth} 轮追问（共 ${session.maxDepth} 轮）。${session.roundKey === 'round2' ? '\n二面追问应以岗位职责 + 公司实际业务为主要参考资料展开，最后一轮可设计前沿探索/压力题考察突发应对与思维拓展力。' : ''}
 
 【你的任务】
 根据候选人的回答生成下一个追问。要求：

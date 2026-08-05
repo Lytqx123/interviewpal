@@ -23,6 +23,18 @@ const COMMANDS = [
     patterns: [/投递/, /apply\s*to/i],
     help: '投递：发送「投递到 公司名 [岗位名]」，可指定简历版本（如「投递 v2 到 星辰科技 产品经理」）；投递即冻结，不可换版本',
   },
+  {
+    intent: 'query_progress',
+    needs: 'text',
+    patterns: [/查进度/, /进度查询/, /轮次状态/, /面试进度/],
+    help: '查进度：发送「查进度 公司名」查看该公司各轮次练习与达标情况',
+  },
+  {
+    intent: 'practice_round',
+    needs: 'text',
+    patterns: [/练一面/, /练二面/, /练三面/, /开始一面/, /开始二面/, /开始三面/, /练习\s*[一二三]面/],
+    help: '开始某轮：发送「练二面 公司名 [岗位名]」开始该轮模拟（二面以岗位职责+公司业务+前沿探索题展开）',
+  },
 ];
 
 export function detectCommand(message) {
@@ -43,4 +55,26 @@ export function detectCommand(message) {
 
 export function helpText() {
   return COMMANDS.map((c) => c.help).join('\n');
+}
+
+// 解析轮次命令：从「练二面 公司名 岗位名」提取 roundKey + 公司名 + 岗位名
+const ROUND_MAP = { 一: 'round1', 二: 'round2', 三: 'round3', 1: 'round1', 2: 'round2', 3: 'round3' };
+export function parseRoundCommand(text) {
+  if (!text) return null;
+  const m = text.match(/(?:练|开始|练习)\s*([一二三1-3])\s*面/);
+  if (!m) return null;
+  const roundKey = ROUND_MAP[m[1]];
+  if (!roundKey) return null;
+  // 去掉命令前缀，剩下作为"公司名 岗位名"
+  const rest = text.replace(/(?:练|开始|练习)\s*[一二三1-3]\s*面/, '').trim();
+  let companyName = rest;
+  let positionTitle = null;
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  if (tokens.length >= 2) {
+    companyName = tokens[0];
+    positionTitle = tokens.slice(1).join(' ');
+  } else if (tokens.length === 1) {
+    companyName = tokens[0];
+  }
+  return { roundKey, companyName: companyName || null, positionTitle };
 }

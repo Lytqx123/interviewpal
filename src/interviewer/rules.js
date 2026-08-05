@@ -167,6 +167,87 @@ function getStrategy(jobType) {
   return FOLLOWUP_STRATEGIES[jobType] ?? DEFAULT_STRATEGY;
 }
 
+// ============ 阶段八：二面（业务面）/ 三面（终面）差异化策略 ============
+// 二面核心要求：以"岗位职责 + 目标公司实际业务"为主要参考资料展开，
+// 并联网搜索设计前沿探索类题目，考察应对突发情况的压力与思维拓展力。
+// 三面：职业规划 / 价值观契合 / 抗压综合素质。
+// 联网调研依据：二面深挖岗位匹配与业务场景、行业最新动态、压力情景模拟；终面看整体素质与长期匹配。
+
+// 二面（round2）业务面策略：业务理解 → 案例深挖 → 前沿探索/压力题
+function round2Strategy(jobType) {
+  return [
+    {
+      focus: '业务理解',
+      intent: '结合岗位职责与公司业务考察岗位匹配',
+      build: (ctx) => {
+        const resps = ctx.roundContext?.responsibilities ?? [];
+        const biz = ctx.roundContext?.companyBusiness ?? [];
+        const respText = resps[0] ?? ctx.jobProfile?.title ?? '这个岗位';
+        const bizText = biz[0]?.name ? `（参考我们${biz[0].name}相关业务）` : '';
+        return `我们这个岗位的核心职责包括"${respText}"${bizText}。结合你对我们公司业务的了解，你怎么理解这个职责？你会优先关注哪一块？`;
+      },
+    },
+    {
+      focus: '案例深挖',
+      intent: '基于公司实际业务场景考察解决问题能力',
+      build: (ctx) => {
+        const biz = ctx.roundContext?.companyBusiness ?? [];
+        const resps = ctx.roundContext?.responsibilities ?? [];
+        const scene = biz[0]?.summary ?? resps[0] ?? '一个典型业务场景';
+        return `假设我们公司遇到这样一个情况：${scene}。如果由你来负责，你会怎么设计方案或拆解解决路径？关键取舍是什么？`;
+      },
+    },
+    {
+      focus: '前沿探索',
+      intent: '联网前沿话题 + 压力情景，考察突发应对与思维拓展力',
+      build: (ctx) => buildFrontierQuestion(ctx, jobType),
+    },
+  ];
+}
+
+// 三面（round3）终面策略：职业规划 → 价值观契合 → 抗压综合素质
+function round3Strategy() {
+  return [
+    {
+      focus: '职业规划',
+      intent: '考察长期动机与公司契合',
+      build: (ctx) => `你未来 3-5 年的职业规划是什么？为什么选择我们公司这个${ctx.jobProfile?.title ?? '岗位'}？你希望在这里实现什么成长？`,
+    },
+    {
+      focus: '价值观契合',
+      intent: '考察价值取向与文化匹配',
+      build: () => '你怎么理解"责任感"和"团队协作"？能讲一次你在工作中坚持原则、和团队达成共识的经历吗？',
+    },
+    {
+      focus: '抗压综合素质',
+      intent: '考察压力下的关键决策与自我认知',
+      build: () => '讲一次你在高压下做关键决策的经历——当时是什么情况，你怎么权衡的，结果如何？如果入职后发现自己不适应，你会怎么办？',
+    },
+  ];
+}
+
+// 前沿探索/压力题：优先用联网前沿话题，无话题时按岗位类型用模板兜底（仍考察思维拓展力）。
+function buildFrontierQuestion(ctx, jobType) {
+  const topics = ctx.roundContext?.frontierTopics ?? [];
+  if (topics.length) {
+    const t = topics[0];
+    const topicText = t.topic || t.summary || '一个行业新趋势';
+    return `最近行业出现这样的动态：${topicText}。你怎么看这个趋势对我们这块业务的影响？如果让你负责应对这个突发变化，你的思路和优先级是什么？`;
+  }
+  // 无联网话题的兜底压力题（按岗位类型）
+  const fallback = FRONTIER_FALLBACK[jobType] ?? FRONTIER_FALLBACK.tech;
+  return fallback;
+}
+
+const FRONTIER_FALLBACK = {
+  tech: '假设线上突然出现大规模请求超时，且复盘发现是新上线功能引起，但你还没定位到根因，业务方又催着恢复。你会怎么在压力下决策？说说你的排查思路和止损策略。',
+  product: '假设竞品突然上线了一个颠覆性功能，用户流失明显，老板要你 3 天内拿出应对方案。你会怎么在信息不全的情况下做决策？',
+  operation: '假设你策划的活动上线后 unexpectedly 出现负面舆情，半天内持续发酵。你会怎么应急处理？短期止损和长期修复分别怎么做？',
+  sales: '假设核心大客户突然提出要降价 30%，否则转投竞品，而你的权限给不到这个折扣。你会怎么在压力下谈判？',
+  function: '假设公司临时推行一项你并不认同的新政策，需要你带头执行并向团队解释。你会怎么处理这种价值冲突？',
+  civil: '假设你负责的群众工作突然出现激烈冲突，现场情绪失控。你会怎么在压力下处置？说说你的应急原则。',
+};
+
 // 开场白按轮次定位（方案书 §5.4：一面简历面 / 二面业务面 / 三面终面）
 const ROUND_INTROS = {
   round1: '我看过你的简历，对你申请的这个岗位很感兴趣，我们先聊聊你的经历。',
@@ -198,9 +279,16 @@ export function openingByRules({ resumeProfile, jobProfile, roundKey }) {
   };
 }
 
+// 按 roundKey 选策略池：一面简历面（jobType 驱动）/ 二面业务面 / 三面终面
+function getRoundStrategy(session) {
+  if (session.roundKey === 'round2') return round2Strategy(session.jobType);
+  if (session.roundKey === 'round3') return round3Strategy();
+  return getStrategy(session.jobType);
+}
+
 // 规则兜底：生成追问（根据当前 depth 选策略层，深度递进）
 export function followupByRules(session, candidateAnswer) {
-  const strategy = getStrategy(session.jobType);
+  const strategy = getRoundStrategy(session);
   const idx = Math.min(session.depth - 1, strategy.length - 1);
   const s = strategy[idx];
   return {

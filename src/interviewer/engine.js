@@ -8,7 +8,8 @@ import { buildOpeningPrompt, buildFollowupPrompt } from './prompts.js';
 import { openingByRules, followupByRules, closingByRules } from './rules.js';
 
 // 创建面试会话（状态机）
-export function createSession({ resumeProfile, jobProfile, roundKey = 'round1', maxDepth = 3, llm = null } = {}) {
+// 阶段八：roundContext 承载二面业务面上下文（岗位职责 + 公司业务 + 联网前沿话题）。
+export function createSession({ resumeProfile, jobProfile, roundKey = 'round1', maxDepth = 3, llm = null, roundContext = null } = {}) {
   if (!resumeProfile || !jobProfile) {
     throw new Error('resumeProfile and jobProfile required');
   }
@@ -18,6 +19,7 @@ export function createSession({ resumeProfile, jobProfile, roundKey = 'round1', 
     jobType: jobProfile.jobType || 'tech',
     resumeProfile,
     jobProfile,
+    roundContext, // 二面业务面参考资料（岗位职责/公司业务/前沿话题），其它轮次为 null
     turns: [], // { role, content, turnNo, focusArea, intent }
     depth: 0, // 已完成的追问轮数
     maxDepth,
