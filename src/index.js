@@ -10,3 +10,12 @@ export { enrichResume, enrichJd, collectResumeEntities, collectJdEntities } from
 export { detectCommand, helpText } from './feishu/commands.js';
 export { createMessageHandler } from './feishu/handler.js';
 export { handleResumeUpload, handleJdPaste, handleApply } from './onboarding/index.js';
+export { startVoiceServer, readVoiceConfig, loadEnvFile } from './voice/bridge.js';
+export { createMockDoubaoServer, buildServerFrame, makeBeepPcm } from './voice/mock.js';
+export {
+  buildControlFrame,
+  buildAudioFrame,
+  buildFrame,
+  parseFrame,
+  gunzip,
+} from './voice/protocol.js';

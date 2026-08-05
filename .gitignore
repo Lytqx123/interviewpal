@@ -7,3 +7,7 @@ data/
 node_modules/
 .DS_Store
 *.log
+
+# 语音链路本地凭据（阶段四）：只留 example 模板入库
+.env.voice.local
+.env

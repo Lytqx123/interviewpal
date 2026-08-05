@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InterviewPal · 实时语音通话</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.3em; display: flex; align-items: center; gap: 10px; }
+  .badge { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #eee; color: #555; }
+  .badge.mock { background: #ffe9a8; color: #7a5b00; }
+  .badge.env { background: #c7eecb; color: #1b5e20; }
+  .card { background: #f7f7f9; border: 1px solid #e4e4ea; border-radius: 10px; padding: 14px; margin: 12px 0; }
+  .card label { display: block; font-size: 12px; color: #555; margin-top: 8px; }
+  .card input { width: 100%; box-sizing: border-box; padding: 7px; margin: 3px 0 0; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; }
+  button { padding: 9px 18px; border: none; border-radius: 8px; background: #2b6cff; color: #fff; cursor: pointer; font-size: 14px; }
+  button:disabled { background: #999; cursor: default; }
+  button.danger { background: #c33; }
+  #status { padding: 7px 12px; border-radius: 8px; margin: 10px 0; font-size: 13px; }
+  .idle { background: #eee; }
+  .connecting { background: #ffe9a8; }
+  .ready { background: #c7eecb; }
+  .error { background: #fbc; }
+  .metrics { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: #444; margin-top: 8px; }
+  .metrics b { font-size: 14px; }
+  meter { width: 120px; height: 12px; vertical-align: middle; }
+  #log { height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 8px; font-size: 13px; line-height: 1.55; background: #fafafa; white-space: pre-wrap; word-break: break-word; }
+  .user { color: #0557b0; }
+  .ai { color: #0a6b32; }
+  .sys { color: #777; font-size: 12px; }
+  .hint { font-size: 12px; color: #666; margin-top: 8px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<h1>InterviewPal · 实时语音通话 <span id="modeBadge" class="badge">加载中…</span></h1>
+
+<div class="card" id="credsCard" hidden>
+  <label>App ID（火山引擎控制台 → 语音技术 → 实时对话）</label>
+  <input id="appId" placeholder="123456789" autocomplete="off">
+  <label>Access Key（Access Token）</label>
+  <input id="accessKey" type="password" placeholder="your-access-key" autocomplete="off">
+  <div class="hint">凭据仅存在本机 localStorage，仅发给本地代理，代理负责注入鉴权 header。</div>
+</div>
+
+<div class="row">
+  <button id="connect">开始通话</button>
+  <button id="hangup" class="danger" disabled>挂断</button>
+</div>
+
+<div id="status" class="idle">未连接</div>
+
+<div class="metrics">
+  <span>上行帧 <b id="sentCount">0</b></span>
+  <span>下行帧 <b id="recvCount">0</b></span>
+  <span>通话时长 <b id="duration">00:00</b></span>
+  <span>麦克风音量 <meter id="level" min="0" max="1" value="0"></meter></span>
+</div>
+
+<div id="log" class="hint"></div>
+<div class="hint">接通后对着麦克风说话；AI 说话时插话会触发打断（全双工）。建议戴耳机避免回声。Mock 模式下会返回提示音验证双向链路。</div>
+
+<script type="module" src="/voice/call.js"></script>
+</body>
+</html>

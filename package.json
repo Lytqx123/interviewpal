@@ -8,6 +8,10 @@
     "node": ">=22.22.3"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "voice": "node src/voice/bridge.js"
+  },
+  "dependencies": {
+    "ws": "^8.21.2"
   }
 }
