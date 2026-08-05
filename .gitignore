@@ -1,0 +1,9 @@
+# 运行时数据：简历、复盘、缓存属于用户隐私，一律不进仓库
+data/
+
+# 笔试要求：仓库里不放任何 markdown 文件（README、方案书等一律排除）
+*.md
+
+node_modules/
+.DS_Store
+*.log

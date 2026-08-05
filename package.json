@@ -1,0 +1,13 @@
+{
+  "name": "interviewpal",
+  "version": "0.1.0",
+  "description": "求职面试陪练 Agent —— 档案库数据模型（阶段一）",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.3"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
