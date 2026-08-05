@@ -115,6 +115,26 @@ export class ArchiveStore {
     return data;
   }
 
+  // ---------- 简历画像（全局层，跟人走，§3.3/§5.3） ----------
+
+  // 简历画像是"人"的属性，不是公司/岗位的属性：
+  // 一份简历可以投多家公司，所以放在全局层，和 user.json 平级。
+  getResumeProfile() {
+    return this.readJson(path.join(this.root, 'resume.json'), null);
+  }
+
+  saveResumeProfile(profile) {
+    const now = new Date().toISOString();
+    const data = {
+      ...profile,
+      version: 1,
+      createdAt: profile.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.saveJson(path.join(this.root, 'resume.json'), data);
+    return data;
+  }
+
   // ---------- 公司（一层：公司画像） ----------
 
   createCompany({ name, focus = false, notes = '' } = {}) {
@@ -135,6 +155,12 @@ export class ArchiveStore {
     };
     this.saveJson(path.join(this.companyDir(companyId), 'company.json'), company);
     return company;
+  }
+
+  // 按名字找公司：飞书命令里用户可能直接说"粘贴 XX 公司 JD"，不用再手动建公司
+  findCompanyByName(name) {
+    if (!name) return null;
+    return this.listCompanies({ includeArchived: true }).find((c) => c.name === name) ?? null;
   }
 
   getCompany(companyId) {
