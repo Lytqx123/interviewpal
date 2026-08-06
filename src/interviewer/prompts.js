@@ -39,7 +39,59 @@ function roundContextBlock(roundContext) {
 }
 
 // 开场白 prompt：生成开场白 + 首个问题
-export function buildOpeningPrompt({ resumeProfile, jobProfile, roundKey, roundContext }) {
+// ============ R2：预分析作战地图注入 + 动态调整指令 ============
+// 在旧 prompt 基础上追加 L1 候选画像 + L4 必问主线 + L6 评分锚点 + L7 轮次定位，
+// 并给策略模式追加"卡顿降档 / 偏题拉回 / 崩盘换线"指令。
+
+export function strategyPlanBlock(session) {
+  const plan = session?.strategyPlan;
+  if (!plan?.layers) return '';
+  const { layers } = plan;
+  const positioning = layers.roundPositioning?.[session.roundKey] ?? null;
+  const baseline = session.baselinePlan?.items ?? [];
+  return [
+    '【预分析作战地图】',
+    `L1 候选画像摘要：${JSON.stringify(layers.candidateProfile ?? {})}`,
+    `L4 必问主线：${JSON.stringify(layers.mustAskMainlines ?? [])}`,
+    `L6 评分锚点：${JSON.stringify(layers.scoreAnchors ?? {})}`,
+    `L7 轮次定位（${session.roundKey}）：${JSON.stringify(positioning ?? {})}`,
+    `当前 baseline 队列：${JSON.stringify(
+      baseline.slice(0, 8).map((i) => ({ mainlineId: i.mainlineId, focus: i.focus, question: i.question })),
+    )}`,
+  ].join('\n');
+}
+
+export function dynamicAdjustmentInstruction() {
+  return `【动态调整指令】（仅用于追问决策）
+1. 若候选人回答口语卡顿（嗯/就是就是/重复）或明显答不上来 → 降一档追问（深→中或中→浅）
+2. 若候选人偏题跑题 → 先用话术拉回原问题
+3. 若深挖时回答崩盘（难度高 + 流畅差 + 浅薄）→ 换到下一个必问主线
+4. 每条主线最多只降档 1 次；换线需要 2 个信号叠加，避免面试跳跃`;
+}
+
+export function buildOpeningPrompt(opts) {
+  const session = {
+    roundKey: opts.roundKey,
+    strategyPlan: opts.strategyPlan,
+    baselinePlan: opts.baselinePlan,
+  };
+  const base = buildOpeningPromptBase(opts);
+  const block = strategyPlanBlock(session);
+  return block ? `${base}\n\n${block}` : base;
+}
+
+export function buildFollowupPrompt(session, candidateAnswer, signals = null, decision = null) {
+  const base = buildFollowupPromptBase(session, candidateAnswer);
+  const parts = [base];
+  const block = strategyPlanBlock(session);
+  if (block) parts.push(block);
+  if (session?.mode === 'strategy') parts.push(dynamicAdjustmentInstruction());
+  if (signals) parts.push(`【实时信号】${JSON.stringify(signals)}`);
+  if (decision) parts.push(`【本轮决策】${JSON.stringify(decision)}`);
+  return parts.join('\n\n');
+}
+
+export function buildOpeningPromptBase({ resumeProfile, jobProfile, roundKey, roundContext }) {
   return `你是一位经验丰富的面试官，正在面试一位应聘"${jobProfile.title}"岗位的候选人，公司是${jobProfile.companyName ?? '我们公司'}。
 
 【轮次定位】
@@ -66,7 +118,7 @@ ${JSON.stringify(jobProfile, null, 2)}
 }
 
 // 追问 prompt：根据候选人回答生成下一个追问
-export function buildFollowupPrompt(session, candidateAnswer) {
+export function buildFollowupPromptBase(session, candidateAnswer) {
   const dialogue = session.turns
     .map((t) => (t.role === 'interviewer' ? `面试官：${t.content}` : `候选人：${t.content}`))
     .join('\n');

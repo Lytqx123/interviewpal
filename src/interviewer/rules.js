@@ -280,6 +280,114 @@ export function openingByRules({ resumeProfile, jobProfile, roundKey }) {
 }
 
 // 按 roundKey 选策略池：一面简历面（jobType 驱动）/ 二面业务面 / 三面终面
+// ============ R2：预分析策略模式（baseline + 实时信号 + 动态调整） ============
+// strategyPlan 缺失时显式降级为上方"职位类型策略池"（重构计划回退条款）。
+// 决策：继续（消费 baseline）→ 追问（followupTree 深档）→ 降档/拉回/换线 → 结束。
+
+function askedQuestions(session) {
+  return new Set(session.turns.filter((t) => t.role === 'interviewer').map((t) => t.content));
+}
+
+function pickFollowup(plan, mainlineId, level, asked) {
+  const tree = (plan?.layers?.followupTree ?? []).filter(
+    (f) => f.mainlineId === mainlineId && f.level === level,
+  );
+  return tree.find((f) => !asked.has(f.question)) ?? tree[0] ?? null;
+}
+
+function nextBaseline(session, baseline) {
+  const item = baseline[session.baselineIndex];
+  session.baselineIndex++;
+  session.adjustedMainlineId = null;
+  if (!item) {
+    session.currentMainlineId = null;
+    return {
+      question: '今天的时间差不多了，我们到这里结束。你还有什么想问我的吗？',
+      focusArea: '收尾',
+      intent: '结束面试',
+      mainlineId: null,
+      adjustment: null,
+      done: true,
+    };
+  }
+  session.currentMainlineId = item.mainlineId;
+  return {
+    question: item.question,
+    focusArea: item.focus,
+    intent: item.intent,
+    mainlineId: item.mainlineId,
+    adjustment: null,
+  };
+}
+
+function pullBack(currentItem) {
+  return {
+    question: `我们回到刚才的问题：${currentItem.question}（刚才的回答有点跑题，换个角度再说说）`,
+    focusArea: currentItem.focus,
+    intent: '拉回话题',
+    mainlineId: currentItem.mainlineId,
+    adjustment: 'pull-back',
+  };
+}
+
+function levelDown(session, plan, currentItem) {
+  const asked = askedQuestions(session);
+  const lower =
+    pickFollowup(plan, currentItem.mainlineId, 'medium', asked) ??
+    pickFollowup(plan, currentItem.mainlineId, 'shallow', asked);
+  session.adjustedMainlineId = currentItem.mainlineId;
+  return {
+    question: lower?.question ?? `换个更简单的角度再说一下：${currentItem.question}`,
+    focusArea: currentItem.focus,
+    intent: lower?.intent ?? '降档追问',
+    mainlineId: currentItem.mainlineId,
+    adjustment: 'level-down',
+  };
+}
+
+function switchLine(session, baseline) {
+  const next = nextBaseline(session, baseline);
+  if (next.done) return next;
+  return {
+    ...next,
+    question: `我们换个角度来聊。${next.question}`,
+    adjustment: 'switch-line',
+  };
+}
+
+// 策略模式决策入口：每条主线最多 1 次档位调整；换线需 2 个信号叠加（难度高+流畅差+浅薄，或偏题+浅薄）。
+export function nextQuestionByRules(session, signals) {
+  const baseline = session.baselinePlan?.items ?? [];
+  const plan = session.strategyPlan;
+  const currentId = session.currentMainlineId;
+  const currentItem = baseline.find((i) => i.mainlineId === currentId) ?? null;
+  const alreadyAdjusted = session.adjustedMainlineId === currentId;
+
+  if (currentId && currentItem && signals && !alreadyAdjusted) {
+    const off = signals.direction === 'off_topic';
+    const stuck = signals.fluency === 'poor' || signals.difficulty === 'high';
+    const collapsed = signals.difficulty === 'high' && signals.fluency === 'poor' && signals.depth === 'shallow';
+    if (collapsed) return switchLine(session, baseline);
+    if (off && signals.depth === 'shallow') return switchLine(session, baseline);
+    if (off) return pullBack(currentItem);
+    if (stuck) return levelDown(session, plan, currentItem);
+  }
+
+  if (currentId && currentItem && signals?.direction === 'on_topic' && signals.depth === 'deep' && signals.difficulty !== 'high') {
+    const deep = pickFollowup(plan, currentId, 'deep', askedQuestions(session));
+    if (deep) {
+      return {
+        question: deep.question,
+        focusArea: currentItem.focus,
+        intent: deep.intent,
+        mainlineId: currentItem.mainlineId,
+        adjustment: null,
+      };
+    }
+  }
+  return nextBaseline(session, baseline);
+}
+
 function getRoundStrategy(session) {
   if (session.roundKey === 'round2') return round2Strategy(session.jobType);
   if (session.roundKey === 'round3') return round3Strategy();

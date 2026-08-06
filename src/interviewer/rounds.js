@@ -6,6 +6,12 @@
 // 组装成 roundContext 供面试官策略池引用。无 search/无缓存时优雅降级（规则兜底）。
 import { enrichJd } from '../enrich/enrich.js';
 
+// R2：从预分析作战地图 L7 读取轮次差异化策略（二面业务面 / 三面终面），
+// 取代硬编码；strategyPlan 缺失时由 rules.js 的职位类型策略池兜底。
+export function roundMetaFromPlan(strategyPlan, roundKey) {
+  return strategyPlan?.layers?.roundPositioning?.[roundKey] ?? null;
+}
+
 // 准备二面（round2）上下文：岗位职责 + 公司业务 + 前沿探索题。
 // 联网调研依据：二面深挖岗位匹配与业务场景、行业最新动态与前沿趋势、压力情景模拟。
 export async function prepareRound2Context({ store, search, companyId, positionId }) {

@@ -1,9 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createSession, startInterview, askFollowup, closeInterview, getSessionSummary,
+  createSession, startInterview, askFollowup, nextQuestion, buildBaselinePlan, closeInterview, getSessionSummary, ingestSignal,
   openingByRules, followupByRules, closingByRules,
 } from '../src/interviewer/index.js';
+import { buildRulesPlan } from '../src/strategy/rules.js';
 
 // 测试用简历画像（覆盖技能/经历/公司）
 const RESUME = {
@@ -255,5 +256,189 @@ describe('面试官 · LLM 路径', () => {
     const session = createSession({ resumeProfile: RESUME, jobProfile: jobProfile('tech'), llm: garbageLlm });
     const r = await startInterview(session);
     assert.ok(r.question, '垃圾输出仍有规则兜底');
+  });
+});
+
+// ============ R2：预分析策略模式（baseline + 实时信号 + 动态调整） ============
+
+function r2StrategyPlan() {
+  return buildRulesPlan({
+    resumeVersion: {
+      versionId: 'ver_1',
+      versionNo: 1,
+      rawText: '张三是后端工程师，熟悉 Redis 和 Kafka，负责订单系统 QPS 提升',
+      profile: {
+        basics: { name: '张三', title: '后端工程师' },
+        skills: [{ name: 'Redis', level: '熟练' }],
+        experiences: [{ id: 'exp_1', summary: '在字节跳动负责订单系统，QPS 从 500 提升到 2000', org: '字节跳动' }],
+      },
+    },
+    company: { companyId: 'c_1', name: '星宸科技' },
+    position: {
+      positionId: 'p_1',
+      title: '高级后端工程师',
+      jobType: 'tech',
+      profile: { responsibilities: ['负责订单系统设计'], requirements: ['熟悉 Java'], keywords: ['订单'] },
+    },
+  });
+}
+
+describe('面试官 · 预分析策略模式（R2）', () => {
+  const plan = r2StrategyPlan();
+
+  it('createSession：不传 strategyPlan 显式回退规则模式，传了走策略模式', () => {
+    const fallback = createSession({ resumeProfile: RESUME, jobProfile: jobProfile() });
+    assert.equal(fallback.mode, 'rules-fallback');
+    assert.equal(fallback.baselinePlan.items.length, 0);
+    assert.equal(fallback.state, 'planned');
+
+    const s = createSession({ resumeProfile: RESUME, jobProfile: jobProfile(), strategyPlan: plan });
+    assert.equal(s.mode, 'strategy');
+    assert.ok(s.baselinePlan.items.length >= 5);
+  });
+
+  it('buildBaselinePlan：题数 ≥5 且每题对应 L4 主线之一', () => {
+    const ids = new Set(plan.layers.mustAskMainlines.map((m) => m.id));
+    for (const round of ['round1', 'round2', 'round3']) {
+      const bp = buildBaselinePlan(plan, round);
+      assert.ok(bp.items.length >= 5, `${round} 题数 ${bp.items.length} >= 5`);
+      for (const item of bp.items) {
+        assert.ok(ids.has(item.mainlineId), `${item.mainlineId} 属于 L4 主线`);
+      }
+      assert.ok(bp.positioning, `${round} 有 L7 轮次定位`);
+    }
+  });
+
+  it('buildBaselinePlan：二面与一面差异化（业务面 + 前沿探索来自 L7/roundContext）', () => {
+    const r1 = buildBaselinePlan(plan, 'round1');
+    const r2 = buildBaselinePlan(plan, 'round2', {
+      responsibilities: ['负责订单系统设计'],
+      companyBusiness: [{ name: '星宸科技', summary: '企业级 SaaS' }],
+      frontierTopics: [{ topic: '大模型 Agent 面试新趋势' }],
+    });
+    assert.notEqual(r1.items[0].mainlineId, r2.items[0].mainlineId, '二面主线排序与一面不同');
+    assert.notEqual(r1.positioning.focus, r2.positioning.focus, 'L7 轮次定位不同');
+    assert.ok(r2.items.some((i) => i.question.includes('大模型 Agent 面试新趋势')), '前沿探索注入');
+    assert.ok(r2.items.some((i) => i.question.includes('订单系统设计')), '业务职责注入');
+  });
+
+  it('ingestSignal：四类信号提取（卡顿/偏题）', () => {
+    const stuck = ingestSignal('技术方案我不太清楚，没深入研究过，嗯……就是就是……这个……', {
+      question: '请讲讲你的技术方案',
+    });
+    assert.equal(stuck.difficulty, 'high');
+    assert.equal(stuck.fluency, 'poor');
+    assert.equal(stuck.direction, 'on_topic');
+
+    const off = ingestSignal('我觉得篮球很有意思，平时经常看比赛', { question: '请讲讲你的技术方案' });
+    assert.equal(off.direction, 'off_topic');
+  });
+
+  it('nextQuestion：卡顿信号触发降档追问（深→中）', async () => {
+    const session = createSession({ resumeProfile: RESUME, jobProfile: jobProfile('tech'), strategyPlan: plan });
+    await startInterview(session);
+    assert.equal(session.state, 'running');
+    const f1 = await nextQuestion(session, '我负责订单系统的核心模块，做了 Redis 缓存');
+    assert.equal(f1.mainlineId, plan.layers.mustAskMainlines[0].id);
+
+    const f2 = await nextQuestion(session, '技术方案我不太清楚，没深入研究过，嗯……就是就是……这个……');
+    assert.equal(f2.adjustment, 'level-down');
+    assert.equal(f2.mainlineId, f1.mainlineId);
+    assert.equal(session.state, 'adjusting');
+    const medium = plan.layers.followupTree.find((f) => f.mainlineId === f1.mainlineId && f.level === 'medium');
+    assert.equal(f2.question, medium.question, '降档到 medium 追问');
+  });
+
+  it('nextQuestion：偏题信号触发拉回话术', async () => {
+    const session = createSession({ resumeProfile: RESUME, jobProfile: jobProfile('tech'), strategyPlan: plan });
+    await startInterview(session);
+    const f1 = await nextQuestion(session, '我负责订单系统的核心模块');
+    const f2 = await nextQuestion(session, '我觉得篮球很有意思，平时经常看比赛，工作内容我不是很了解');
+    assert.equal(f2.adjustment, 'pull-back');
+    assert.ok(f2.question.includes('回到刚才的问题'));
+    assert.equal(f2.mainlineId, f1.mainlineId);
+  });
+
+  it('nextQuestion：深挖崩盘（难度高+流畅差+浅薄）触发换线', async () => {
+    const session = createSession({ resumeProfile: RESUME, jobProfile: jobProfile('tech'), strategyPlan: plan });
+    await startInterview(session);
+    const f1 = await nextQuestion(session, '我负责订单系统的核心模块');
+    const f2 = await nextQuestion(session, '嗯嗯……这个这个这个这个这个这个……就是就是……不清楚，没做过');
+    assert.equal(f2.adjustment, 'switch-line');
+    assert.notEqual(f2.mainlineId, f1.mainlineId);
+    assert.ok(f2.question.includes('换个角度'));
+    assert.equal(session.state, 'adjusting');
+  });
+
+  it('nextQuestion：同一主线最多 1 次档位调整，再次卡顿走 baseline', async () => {
+    const session = createSession({ resumeProfile: RESUME, jobProfile: jobProfile('tech'), strategyPlan: plan });
+    await startInterview(session);
+    await nextQuestion(session, '我负责订单系统的核心模块');
+    const f2 = await nextQuestion(session, '技术方案我不太清楚，没深入研究过，嗯……就是就是……这个……');
+    assert.equal(f2.adjustment, 'level-down');
+    const f3 = await nextQuestion(session, '方案还是不太清楚，嗯……就是就是……');
+    assert.notEqual(f3.adjustment, 'level-down');
+    assert.notEqual(f3.mainlineId, 'm1');
+  });
+
+  it('executionTrace：关闭后输出每题耗时、信号、是否换线', async () => {
+    const session = createSession({ resumeProfile: RESUME, jobProfile: jobProfile('tech'), strategyPlan: plan });
+    await startInterview(session);
+    await nextQuestion(session, '我负责订单系统的核心模块');
+    await nextQuestion(session, '技术方案我不太清楚，嗯……就是就是……');
+    await closeInterview(session);
+    const summary = getSessionSummary(session);
+    assert.equal(summary.state, 'closed');
+    assert.equal(summary.mode, 'strategy');
+    assert.ok(summary.executionTrace.length >= 2);
+    for (const entry of summary.executionTrace) {
+      assert.ok(Number.isFinite(entry.elapsedMs), '有实际耗时');
+      assert.ok(entry.signals?.difficulty, '有信号');
+      assert.ok('adjustment' in entry, '有是否换线/调整标记');
+    }
+  });
+
+  it('失忆不变量：两场 session 独立，信号与 baseline 不串扰', async () => {
+    const a = createSession({ resumeProfile: RESUME, jobProfile: jobProfile('tech'), strategyPlan: plan });
+    const b = createSession({ resumeProfile: RESUME, jobProfile: jobProfile('tech'), strategyPlan: plan });
+    await startInterview(a);
+    await startInterview(b);
+    await nextQuestion(a, '我负责订单系统的核心模块');
+    await nextQuestion(a, '技术方案我不太清楚，嗯……就是就是……');
+    assert.equal(a.depth, 2);
+    assert.equal(a.signals.length, 2);
+    assert.equal(b.depth, 0);
+    assert.equal(b.turns.length, 1);
+    assert.equal(b.baselineIndex, 0);
+    assert.equal(b.signals.length, 0);
+  });
+
+  it('nextQuestion：strategy 模式 LLM 可用时保留规则决策的调整标记', async () => {
+    const fakeLlm = async (messages) => {
+      const sys = messages[0]?.content ?? '';
+      if (sys.includes('【实时信号】') && sys.includes('level-down')) {
+        return JSON.stringify({
+          question: '降档追问：你能更基础地讲讲吗？',
+          focusArea: '项目深挖',
+          intent: '降档追问',
+        });
+      }
+      return JSON.stringify({
+        question: '正常追问：说说你的技术方案',
+        focusArea: '项目深挖',
+        intent: '验证细节',
+      });
+    };
+    const session = createSession({
+      resumeProfile: RESUME,
+      jobProfile: jobProfile('tech'),
+      strategyPlan: plan,
+      llm: fakeLlm,
+    });
+    await startInterview(session);
+    await nextQuestion(session, '我负责订单系统的核心模块');
+    const f2 = await nextQuestion(session, '技术方案我不太清楚，没深入研究过，嗯……就是就是……这个……');
+    assert.equal(f2.question, '降档追问：你能更基础地讲讲吗？');
+    assert.equal(f2.adjustment, 'level-down', 'LLM 未声明时沿用规则决策标记');
   });
 });
