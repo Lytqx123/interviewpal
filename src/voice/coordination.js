@@ -166,9 +166,26 @@ export function collectChatResponse(session, text) {
 }
 
 /** 通话结束：正式收尾并触发复盘教练（全记忆），返回复盘结果与会话摘要。 */
-export async function finishVoiceSession({ store, llm = null, session, companyId, positionId, roundKey, reply = null }) {
+export async function finishVoiceSession({
+  store,
+  llm = null,
+  session,
+  companyId,
+  positionId,
+  roundKey,
+  reply = null,
+  resumeVersionId = null,
+}) {
   await closeInterview(session);
-  const review = await reviewWithMemory(session, { store, companyId, positionId, roundKey, llm, reply });
+  const review = await reviewWithMemory(session, {
+    store,
+    companyId,
+    positionId,
+    roundKey,
+    llm,
+    reply,
+    resumeVersionId,
+  });
   return { review, summary: getSessionSummary(session) };
 }
 
@@ -192,6 +209,7 @@ export function createVoiceCoordination({ store, llm = null, search = null, log 
         positionId,
         roundKey,
         config: created.config,
+        resumeVersionId: created.resumeVersion?.versionId ?? null,
       });
       log.info?.(`[voice] 语音会话已创建 ${created.sessionKey}（${companyId}/${positionId}/${roundKey}）`);
       return { sessionKey: created.sessionKey, config: created.config };
@@ -225,6 +243,7 @@ export function createVoiceCoordination({ store, llm = null, search = null, log 
         companyId: entry.companyId,
         positionId: entry.positionId,
         roundKey: entry.roundKey,
+        resumeVersionId: entry.resumeVersionId,
       })
         .then((result) => {
           reports.set(sessionKey, result);

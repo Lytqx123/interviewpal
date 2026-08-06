@@ -86,6 +86,32 @@ export function formatReport(reviewResult, { session } = {}) {
     lines.push('');
   }
 
+  // 预计 vs 实际（P4：预分析 baseline 与实际执行偏差）
+  const pve = reviewResult.planVsExecution;
+  if (pve) {
+    lines.push('【预计 vs 实际】');
+    lines.push(`  ${pve.summary}`);
+    const unasked = pve.unaskedMainlines ?? [];
+    if (unasked.length) {
+      lines.push(`  未问主线：${unasked.map((u) => u.focus || u.mainlineId).join('、')}`);
+    }
+    const sig = pve.signalDistribution ?? {};
+    lines.push(
+      `  信号分布：高难度 ${sig.highDifficulty ?? 0} 次 / 偏题 ${sig.offTopic ?? 0} 次 / 浅薄 ${sig.shallow ?? 0} 次 / 流畅差 ${sig.poorFluency ?? 0} 次`,
+    );
+    const dev = Object.entries(pve.scoreAnchorDeviation ?? {});
+    if (dev.length) {
+      lines.push(`  评分锚点偏差：${dev.map(([d, v]) => `${d} ${v > 0 ? '+' : ''}${v}`).join(' / ')}`);
+    } else {
+      lines.push('  评分锚点偏差：无（各维达到计划期望分位）');
+    }
+    const hr = pve.hitRate;
+    if (hr && hr.total > 0) {
+      lines.push(`  预判翻车点命中率：${hr.hit}/${hr.total}（${hr.rate}%）`);
+    }
+    lines.push('');
+  }
+
   // 下次重点
   if (nextFocus?.length) {
     lines.push('【下次重点】');

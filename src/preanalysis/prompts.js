@@ -1,8 +1,9 @@
 // 预分析 LLM Prompt：面试前一次 LLM 调用，输出七大层定制化面试计划。
 // 四要素：公司 + 岗位 + 简历 + 岗位要求；XML 标签分片；JSON Schema 输出约束。
 import { PREANALYSIS_SCHEMA, MIN_SUB_DIMENSIONS } from './schema.js';
+import { summarizeFeedbackForPrompt } from '../coach/feedback.js';
 
-export function buildPreAnalysisPrompt({ resumeVersion, company, position }) {
+export function buildPreAnalysisPrompt({ resumeVersion, company, position, historicalFeedback = [] }) {
   const resumeProfile = resumeVersion?.profile ?? {};
   const jobProfile = position?.profile ?? {};
   const schemaText = JSON.stringify(PREANALYSIS_SCHEMA, null, 2);
@@ -22,7 +23,8 @@ export function buildPreAnalysisPrompt({ resumeVersion, company, position }) {
 2. 子维度总量不少于 ${MIN_SUB_DIMENSIONS} 个（含追问链与关键问题）
 3. 面试官在面试中"失忆"：本计划只含简历推导信息，不引用历次练习记录（面试官失忆原则）
 4. 动态执行：计划是基线不是脚本，面试中按实时信号调整（卡壳降档 / 偏题拉回 / 意外深度延伸追问）
-5. 只输出 JSON，不要输出任何解释或 markdown`;
+5. 历史偏差修正：若输入含 <historical_feedback>，说明同「简历版本+公司+岗位」最近练习的预期 vs 实际偏差，本轮计划必须针对性修正——上次未问的主线提升优先级并补足追问链；上次翻车的预判点本轮换问法或加强救援；上次评分锚点偏差大的维度调整考察侧重
+6. 只输出 JSON，不要输出任何解释或 markdown`;
 
   const user = `<company>
 公司名：${company.name ?? '未命名公司'}
@@ -42,6 +44,17 @@ export function buildPreAnalysisPrompt({ resumeVersion, company, position }) {
 ${JSON.stringify(resumeProfile, null, 2)}
 </resume>
 
+${historicalFeedback.length
+  ? `<historical_feedback>
+${historicalFeedback
+  .map(
+    (f, i) =>
+      `第 ${i + 1} 次（${f.at ?? ''}）：${summarizeFeedbackForPrompt(f.report)}`,
+  )
+  .join('\n')}
+</historical_feedback>
+`
+  : ''}
 请严格按以下 JSON Schema 输出：\n${schemaText}`;
 
   return [

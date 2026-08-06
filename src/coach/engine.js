@@ -8,6 +8,7 @@ import {
   difficultQuestionsByRules, nextFocusByRules, perQuestionReviewByRules, SCORE_RUBRIC,
 } from './rules.js';
 import { formatReport } from './report.js';
+import { diffPlanVsExecution } from './feedback.js';
 
 // 复盘评估：基于面试 session 生成六维评分 + 改进清单 + 对比上次
 export async function reviewInterview(session, { lastReview = null, llm = null } = {}) {
@@ -38,6 +39,15 @@ export async function reviewInterview(session, { lastReview = null, llm = null }
   if (lastReview?.scores) {
     result.comparedWithLast = compareWithLast(result.scores, lastReview.scores);
   }
+  // P4：预计 vs 实际 偏差对比（仅预分析模式有 baseline/执行轨迹时产出）
+  result.planVsExecution = diffPlanVsExecution({
+    baselinePlan: session?.baselinePlan,
+    plan: session?.preanalysisPlan,
+    roundKey: session?.roundKey,
+    executionTrace: session?.executionTrace,
+    difficultQuestions: result.difficultQuestions,
+    scores: result.scores,
+  });
   return result;
 }
 

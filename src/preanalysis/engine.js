@@ -5,6 +5,22 @@ import { PREANALYSIS_SCHEMA, validatePlan, normalizePlan } from './schema.js';
 import { buildPreAnalysisPrompt } from './prompts.js';
 import { buildFallbackPlan } from './fallback.js';
 import { preanalysisCacheKey, readPreanalysisCache, writePreanalysisCache } from './cache.js';
+import { applyFeedbackAdjustments } from '../coach/selfLearn.js';
+
+// 读取历史 feedback（仅回写过偏差报告时存在；生命周期与缓存一致）
+function readFeedback(store, cacheKey) {
+  const cached = store ? readPreanalysisCache(store, cacheKey) : null;
+  return Array.isArray(cached?.feedback) ? cached.feedback : [];
+}
+
+// 收尾统一：迁移历史 feedback + 应用④层策略调整 + 写缓存
+function finalizePlan(plan, store, cacheKey) {
+  const historicalFeedback = readFeedback(store, cacheKey);
+  const merged = historicalFeedback.length ? { ...plan, feedback: historicalFeedback } : plan;
+  const adjusted = applyFeedbackAdjustments(merged);
+  writePreanalysisCache(store, cacheKey, adjusted);
+  return adjusted;
+}
 
 /**
  * 生成七大层面试计划。
@@ -37,19 +53,28 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
   if (store) {
     const cached = readPreanalysisCache(store, cacheKey);
     if (cached) {
-      return { plan: normalizePlan(cached), source: 'cache', cacheKey, cached: true };
+      return {
+        plan: applyFeedbackAdjustments(normalizePlan(cached)),
+        source: 'cache',
+        cacheKey,
+        cached: true,
+      };
     }
   }
 
   // 2. LLM 优先：chatJson 保证可解析 JSON，validatePlan 保证七层结构合法
   if (llm) {
     try {
-      const messages = buildPreAnalysisPrompt({ resumeVersion, company, position });
+      const messages = buildPreAnalysisPrompt({
+        resumeVersion,
+        company,
+        position,
+        historicalFeedback: readFeedback(store, cacheKey),
+      });
       const data = await chatJson(llm, messages, PREANALYSIS_SCHEMA);
       const check = data ? validatePlan(data) : null;
       if (check?.valid) {
-        const plan = normalizePlan(data);
-        writePreanalysisCache(store, cacheKey, plan);
+        const plan = finalizePlan(normalizePlan(data), store, cacheKey);
         return { plan, source: 'llm', cacheKey, cached: false };
       }
       if (data && !check?.valid) {
@@ -67,6 +92,6 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
     // 规则兜底本身必须合法；若非法说明代码 bug，直接抛错暴露
     throw new Error(`preanalysis rules fallback invalid: ${check.errors.join('; ')}`);
   }
-  writePreanalysisCache(store, cacheKey, plan);
-  return { plan: normalizePlan(plan), source: 'rules', cacheKey, cached: false };
+  const finalized = finalizePlan(normalizePlan(plan), store, cacheKey);
+  return { plan: finalized, source: 'rules', cacheKey, cached: false };
 }

@@ -13,6 +13,8 @@ import {
   markAlsoStuckLastTime,
   makeCheckable,
 } from './rules.js';
+import { updateStrategyCacheWithFeedback } from './selfLearn.js';
+import { preanalysisCacheKey } from '../preanalysis/cache.js';
 import { newReviewRecord } from '../archive/entities.js';
 
 // 记忆闭环主入口：一场面试结束后调用，自动读取上次复盘并写回档案库。
@@ -23,6 +25,8 @@ export async function reviewWithMemory(session, {
   roundKey,
   llm = null,
   reply = null,
+  resumeVersionId = null,
+  cacheKey = null,
 } = {}) {
   if (!store) throw new Error('reviewWithMemory 需要 store（记忆闭环依赖档案库）');
   if (!companyId || !positionId || !roundKey) {
@@ -56,6 +60,20 @@ export async function reviewWithMemory(session, {
     sessionId: session.sessionId,
     reviewId: saved.reviewId,
   });
+
+  // P4：偏差报告回写预分析缓存（自学习闭环；失败仅告警，不影响复盘主流程）
+  if (result.planVsExecution) {
+    try {
+      const key =
+        cacheKey ??
+        (resumeVersionId && companyId && positionId
+          ? preanalysisCacheKey({ resumeVersion: resumeVersionId, companyId, positionId })
+          : null);
+      if (key) updateStrategyCacheWithFeedback(store, key, result.planVsExecution);
+    } catch (err) {
+      console.warn('[coach] feedback writeback failed:', err.message);
+    }
+  }
 
   // 7. 生成报告 + 回传渠道（渠道由调用方通过 reply 注入）
   const report = generateReport(result, { session });
