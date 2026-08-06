@@ -12,6 +12,11 @@ export const SCORE_DIMENSIONS = ['logic', 'relevance', 'depth', 'fluency', 'inte
 // 困难点分类（§5.9）：未回答上来 / 答偏跑题 / 沉默超时 / 回答浅薄
 export const DIFFICULTY_CATEGORIES = ['noAnswer', 'offTopic', 'silence', 'shallow'];
 
+// 预分析（七层作战地图）缓存文件名（§5.4）。
+// 单独一张表，键 = `resumeVersionId::companyId::positionId`，
+// 删除公司/岗位时由 store 联动释放，生命周期与档案一致。
+export const STRATEGY_CACHE_FILE = 'strategy-cache.json';
+
 // 检索缓存的默认过期时间：
 //   stable   一面相关的公司/技术信息，可以放久一点
 //   volatile 二面三面要强时效，面试前一天会刷新（§5.3）

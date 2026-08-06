@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { newId } from './ids.js';
-import { ROUND_KEYS, JOB_TYPES, CACHE_TTL_MS } from './constants.js';
+import { ROUND_KEYS, JOB_TYPES, CACHE_TTL_MS, STRATEGY_CACHE_FILE } from './constants.js';
 import { emptyRounds } from './entities.js';
 
 // companyId / positionId 只允许这些字符，防止路径穿越。
@@ -251,6 +251,15 @@ export class ArchiveStore {
     return this.updateCompany(companyId, { archived });
   }
 
+  // 删除公司：整目录移除 + 该公司所有岗位的预分析缓存联动释放（§5.4）。
+  // companyId 已通过 assertCompanyId 白名单校验，目标路径安全可控。
+  deleteCompany(companyId) {
+    this.assertCompanyId(companyId);
+    fs.rmSync(this.companyDir(companyId), { recursive: true, force: true });
+    this.deleteStrategyCacheByCompany(companyId);
+    return true;
+  }
+
   // ---------- 岗位（二层：岗位画像 + 轮次状态） ----------
 
   createPosition(companyId, { title, jdText = '', jobType = 'tech' } = {}) {
@@ -283,6 +292,20 @@ export class ArchiveStore {
   getPosition(companyId, positionId) {
     this.assertPositionId(positionId);
     return this.readJson(path.join(this.companyDir(companyId), 'positions', `${positionId}.json`), null);
+  }
+
+  // 删除岗位：岗位文件移除 + 该岗位的预分析缓存联动释放（§5.4）。
+  deletePosition(companyId, positionId) {
+    this.assertCompanyId(companyId);
+    this.assertPositionId(positionId);
+    const file = path.join(this.companyDir(companyId), 'positions', `${positionId}.json`);
+    try {
+      fs.rmSync(file);
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+    this.deleteStrategyCacheByPosition(companyId, positionId);
+    return true;
   }
 
   updatePosition(companyId, positionId, patch) {
@@ -447,6 +470,87 @@ export class ArchiveStore {
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
     }
+  }
+
+  // ---------- 预分析缓存（七层作战地图，§5.4/§5.5） ----------
+
+  strategyCachePath() {
+    return path.join(this.root, STRATEGY_CACHE_FILE);
+  }
+
+  // 整表读写：{ version: 1, entries: { [key]: { plan, createdAt, updatedAt } } }
+  readStrategyCacheTable() {
+    return this.readJson(this.strategyCachePath(), { version: 1, entries: {} });
+  }
+
+  saveStrategyCacheTable(table) {
+    this.saveJson(this.strategyCachePath(), table);
+  }
+
+  getStrategyCache(key) {
+    if (typeof key !== 'string' || !key) return null;
+    return this.readStrategyCacheTable().entries[key]?.plan ?? null;
+  }
+
+  setStrategyCache(key, plan) {
+    if (typeof key !== 'string' || !key) {
+      throw new Error('strategy cache key required');
+    }
+    if (!plan || typeof plan !== 'object') {
+      throw new Error('strategy cache plan required');
+    }
+    const now = new Date().toISOString();
+    const table = this.readStrategyCacheTable();
+    const existing = table.entries[key];
+    table.entries[key] = {
+      plan,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.saveStrategyCacheTable(table);
+    return table.entries[key];
+  }
+
+  deleteStrategyCache(key) {
+    if (typeof key !== 'string' || !key) return false;
+    const table = this.readStrategyCacheTable();
+    if (!(key in table.entries)) return false;
+    delete table.entries[key];
+    this.saveStrategyCacheTable(table);
+    return true;
+  }
+
+  // 删除公司：清掉所有 `::<companyId>::` 前缀匹配的缓存键
+  deleteStrategyCacheByCompany(companyId) {
+    this.assertCompanyId(companyId);
+    const table = this.readStrategyCacheTable();
+    const marker = `::${companyId}::`;
+    let changed = false;
+    for (const key of Object.keys(table.entries)) {
+      if (key.includes(marker)) {
+        delete table.entries[key];
+        changed = true;
+      }
+    }
+    if (changed) this.saveStrategyCacheTable(table);
+    return changed;
+  }
+
+  // 删除岗位：清掉 `::<companyId>::<positionId>` 结尾的缓存键
+  deleteStrategyCacheByPosition(companyId, positionId) {
+    this.assertCompanyId(companyId);
+    this.assertPositionId(positionId);
+    const table = this.readStrategyCacheTable();
+    const suffix = `::${companyId}::${positionId}`;
+    let changed = false;
+    for (const key of Object.keys(table.entries)) {
+      if (key.endsWith(suffix)) {
+        delete table.entries[key];
+        changed = true;
+      }
+    }
+    if (changed) this.saveStrategyCacheTable(table);
+    return changed;
   }
 
   // ---------- 复盘记录（§5.7/§5.9） ----------
