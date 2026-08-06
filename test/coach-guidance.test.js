@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createSession, startInterview } from '../src/interviewer/index.js';
-import { diagnoseBaseline, passRecommendation, analyzeRhythm, getQuestions, recommendByWeakness, exportReview, createInterviewerAgent, createCoachAgent } from '../src/coach/index.js';
+import { analyzeRhythm, getQuestions, recommendByWeakness, exportReview, createInterviewerAgent, createCoachAgent } from '../src/coach/index.js';
 import { ArchiveStore } from '../src/archive/index.js';
 
 const RESUME = {
@@ -22,37 +22,6 @@ function tmpStore(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return new ArchiveStore(dir);
 }
-describe('复盘教练 · 基线诊断与通关建议（方向校准）', () => {
-  it('diagnoseBaseline：汇总各轮次状态 + 下一步建议', (t) => {
-    const store = tmpStore(t);
-    const company = store.createCompany({ name: 'X' });
-    const pos = store.createPosition(company.companyId, { title: '后端', jobType: 'tech' });
-    const diag = diagnoseBaseline({ store, companyId: company.companyId, positionId: pos.positionId });
-    assert.equal(diag.rounds.length, 3, '三轮次');
-    assert.equal(diag.currentRound.roundKey, 'round1', '未练时下一步是一面');
-    assert.match(diag.overall, /已练 0\/3/);
-  });
-
-  it('passRecommendation：达标建议进入下一轮、未达标建议重练', (t) => {
-    const store = tmpStore(t);
-    const company = store.createCompany({ name: 'X' });
-    const pos = store.createPosition(company.companyId, { title: '后端', jobType: 'tech' });
-    // 未练
-    const r0 = passRecommendation({ store, companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1' });
-    assert.equal(r0.ready, false);
-    // 写入一场达标复盘（均分 >= 3.5 且无 <3）
-    store.saveReview({ reviewId: 'rv1', companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1', scores: { logic: 4, relevance: 4, depth: 4, fluency: 4, interaction: 4, confidence: 4 }, improvementList: [], difficultQuestions: [], createdAt: '2026-08-01T00:00:00Z' });
-    const r1 = passRecommendation({ store, companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1' });
-    assert.equal(r1.ready, true, '均分4达标');
-    assert.equal(r1.nextRound, 'round2', '建议进入二面');
-    // 写入一场未达标（有 <3）
-    store.saveReview({ reviewId: 'rv2', companyId: company.companyId, positionId: pos.positionId, roundKey: 'round2', scores: { logic: 2, relevance: 4, depth: 4, fluency: 4, interaction: 4, confidence: 4 }, improvementList: [], difficultQuestions: [], createdAt: '2026-08-02T00:00:00Z' });
-    const r2 = passRecommendation({ store, companyId: company.companyId, positionId: pos.positionId, roundKey: 'round2' });
-    assert.equal(r2.ready, false, 'logic=2 未达标');
-    assert.ok(r2.weakDimensions.includes('逻辑结构'), '指出短板维度');
-  });
-});
-
 describe('复盘教练 · 表达节奏分析', () => {
   it('analyzeRhythm：稳定节奏评 good、填充词多评 warning', () => {
     const turns = [

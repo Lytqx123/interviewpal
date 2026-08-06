@@ -71,11 +71,14 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
         position,
         historicalFeedback: readFeedback(store, cacheKey),
       });
-      const data = await chatJson(llm, messages, PREANALYSIS_SCHEMA);
+      const data = await chatJson(llm, messages, PREANALYSIS_SCHEMA, { maxTokens: 16384, timeoutMs: 300000 });
       const check = data ? validatePlan(data) : null;
       if (check?.valid) {
         const plan = finalizePlan(normalizePlan(data), store, cacheKey);
         return { plan, source: 'llm', cacheKey, cached: false };
+      }
+      if (!data) {
+        console.warn('[preanalysis] llm 未返回可解析 JSON，降级 rules（可调大 maxTokens 或检查模型输出）');
       }
       if (data && !check?.valid) {
         console.warn('[preanalysis] llm plan invalid, fallback to rules:', check.errors.join('; '));

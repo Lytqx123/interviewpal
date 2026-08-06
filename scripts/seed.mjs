@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { ArchiveStore } from '../src/archive/index.js';
 import { handleResumeUpload, handleJdPaste, handleApply } from '../src/onboarding/index.js';
+import { createLlmFromEnv } from '../src/llm/env.js';
 
 const MOCK_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data/mock');
 
@@ -32,6 +33,8 @@ export async function seedDemoData({ dir = MOCK_DIR, storeDir = null, reset = tr
     fs.rmSync(target, { recursive: true, force: true });
   }
   const store = new ArchiveStore(target);
+  const llm = createLlmFromEnv(process.env, path.join(process.cwd(), '.env.local'));
+  const llmMode = llm ? '真实 LLM' : '规则兜底';
   const summary = { resumes: [], companies: [], positions: [], applications: [] };
   const logger = {
     info: (...a) => (typeof log.info === 'function' ? log.info(...a) : log(...a)),
@@ -40,7 +43,7 @@ export async function seedDemoData({ dir = MOCK_DIR, storeDir = null, reset = tr
   // 1. 上传 3 份简历（每次上传 = 一个不可变版本 v1/v2/v3）
   for (const item of manifest.resumes) {
     const content = readText(dir, item.file);
-    const result = await handleResumeUpload({ store, llm: null, search: null, content });
+    const result = await handleResumeUpload({ store, llm, search: null, content });
     summary.resumes.push({
       id: item.id,
       title: item.title,
@@ -49,7 +52,7 @@ export async function seedDemoData({ dir = MOCK_DIR, storeDir = null, reset = tr
       charCount: result.version.charCount,
       source: result.version.source,
     });
-    logger.info(`[seed] 简历已上传：${item.title} → v${result.version.versionNo}`);
+    logger.info(`[seed] 简历已上传：${item.title} → v${result.version.versionNo}（${llmMode}）`);
   }
 
   // 2. 粘贴 9 份 JD（3 公司 × 3 岗位），建公司/岗位双画像
@@ -57,7 +60,7 @@ export async function seedDemoData({ dir = MOCK_DIR, storeDir = null, reset = tr
     const entry = { name: company.name, companyId: null, positions: [] };
     for (const pos of company.positions) {
       const jdText = readText(dir, pos.file);
-      const result = await handleJdPaste({ store, llm: null, search: null, jdText });
+      const result = await handleJdPaste({ store, llm, search: null, jdText });
       entry.companyId = result.company.companyId;
       entry.positions.push({ title: pos.title, positionId: result.position.positionId });
       summary.positions.push({
@@ -67,7 +70,7 @@ export async function seedDemoData({ dir = MOCK_DIR, storeDir = null, reset = tr
         positionId: result.position.positionId,
         jobType: result.jobProfile.jobType,
       });
-      logger.info(`[seed] JD 已粘贴：${company.name} · ${pos.title}`);
+      logger.info(`[seed] JD 已粘贴：${company.name} · ${pos.title}（${llmMode}）`);
     }
     summary.companies.push(entry);
   }

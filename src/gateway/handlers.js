@@ -2,7 +2,7 @@
 // 每个 handler 返回 { intent, reply, data }，reply 为 App 聊天 UI 直接可读的中文文本。
 
 import { handleResumeUpload, handleJdPaste, handleApply, parseApplyCommand } from '../onboarding/index.js';
-import { formatReport, getQuestions, recommendByWeakness } from '../coach/index.js';
+import { formatReport, getQuestions, recommendByWeakness, generateSalaryReport, formatSalaryReport } from '../coach/index.js';
 import { ROUND_KEYS } from '../archive/constants.js';
 
 const ROUND_LABEL = {
@@ -76,6 +76,7 @@ export function handleHelpCommand() {
     '开始一面 / 二面 / 三面：如「在 星辰科技 开始一面」',
     '复盘报告：查看最近一场复盘',
     '困难题 / 高频题：查看重练清单与高频题',
+    '薪资建议：如「星辰科技 薪资建议」（需完成至少一场模拟），可带当前薪资「薪资建议 20万」',
     '状态：查看档案概览',
     '离线：查看离线发件箱',
   ];
@@ -232,6 +233,54 @@ export function handleReviewCommand({ store, text }) {
     intent: 'review',
     reply: `${report}\n\n（最近一场：${review.createdAt}）`,
     data: { review, companyId: review.companyId, positionId: review.positionId },
+  };
+}
+
+/**
+ * 从命令文本中解析当前薪资（万元/年）。
+ * 支持「当前20万」「当前薪资20万」「薪资建议 20万」「谈薪 20万」「salary 20万」等写法。
+ */
+function parseCurrentSalary(text = '') {
+  const m1 = text.match(/当前(?:薪资)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*万/);
+  if (m1) return parseFloat(m1[1]);
+  const m2 = text.match(/(?:薪资(?:建议|报告)?|谈薪|salary)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*万/i);
+  if (m2) return parseFloat(m2[1]);
+  return null;
+}
+
+export async function handleSalaryCommand({ store, llm, search, text }) {
+  const currentSalary = parseCurrentSalary(text);
+  let company = null;
+  let position = null;
+  try {
+    company = resolveCompany(store, text);
+    position = resolvePosition(store, company, text);
+  } catch {
+    // 未指定公司时，用最近有复盘的公司+岗位
+    const reviews = store.listReviews();
+    if (!reviews.length) throw new Error('还没有复盘记录，先完成至少一场模拟再来「薪资建议」');
+    const latest = reviews[0];
+    company = store.getCompany(latest.companyId);
+    position = store.getPosition(latest.companyId, latest.positionId);
+  }
+  const result = await generateSalaryReport({
+    store,
+    companyId: company.companyId,
+    positionId: position.positionId,
+    llm,
+    search,
+    currentSalary,
+  });
+  return {
+    intent: 'salary',
+    reply: formatSalaryReport(result),
+    data: {
+      ready: result.ready,
+      source: result.source,
+      companyId: company.companyId,
+      positionId: position.positionId,
+      currentSalary,
+    },
   };
 }
 

@@ -10,7 +10,7 @@ export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model 
     return null;
   }
 
-  async function chatOnce(messages, { temperature, maxTokens }, useJsonMode) {
+  async function chatOnce(messages, { temperature, maxTokens, timeoutMs = 120000 }, useJsonMode) {
     const body = {
       model,
       messages,
@@ -30,6 +30,7 @@ export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model 
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -42,14 +43,14 @@ export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model 
     return data.choices?.[0]?.message?.content ?? '';
   }
 
-  async function chat(messages, { temperature = 0.2, maxTokens } = {}) {
+  async function chat(messages, { temperature = 0.2, maxTokens, timeoutMs = 120000 } = {}) {
     try {
-      return await chatOnce(messages, { temperature, maxTokens }, true);
+      return await chatOnce(messages, { temperature, maxTokens, timeoutMs }, true);
     } catch (err) {
       // response_format 不是所有 OpenAI 兼容端点都支持（部分会 400），
       // 摘掉该字段重试一次；JSON 解析由上层 parseJsonFromText/chatJson 兜底。
       if (err.status === 400 && /response_format|json_object/i.test(err.body || '')) {
-        return chatOnce(messages, { temperature, maxTokens }, false);
+        return chatOnce(messages, { temperature, maxTokens, timeoutMs }, false);
       }
       throw err;
     }
@@ -57,8 +58,8 @@ export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model 
 
   // 结构化输出助手：带 JSON Schema 提示 + 后置解析容错（双向纵深防御）。
   // 第一次直接请求（json_object 模式）；解析失败时把 schema 追加进 user 消息再试一次。
-  chat.chatJson = async function chatJson(messages, schema, { temperature = 0.2, maxTokens = 4096 } = {}) {
-    return chatJson(chat, messages, schema, { temperature, maxTokens });
+  chat.chatJson = async function chatJson(messages, schema, { temperature = 0.2, maxTokens = 4096, timeoutMs = 120000 } = {}) {
+    return chatJson(chat, messages, schema, { temperature, maxTokens, timeoutMs });
   };
 
   return chat;
@@ -70,10 +71,10 @@ export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model 
  *  - 首次失败：把 schema（JSON Schema 片段）追加到最后一条 user 消息重试一次；
  *  - 仍失败：返回 null，由调用方走规则兜底。
  */
-export async function chatJson(chat, messages, schema, { temperature = 0.2, maxTokens = 4096 } = {}) {
+export async function chatJson(chat, messages, schema, { temperature = 0.2, maxTokens = 4096, timeoutMs = 120000 } = {}) {
   if (typeof chat !== 'function') return null;
   try {
-    const raw = await chat(messages, { temperature, maxTokens });
+    const raw = await chat(messages, { temperature, maxTokens, timeoutMs });
     const data = parseJsonFromText(raw);
     if (data && typeof data === 'object') return data;
   } catch (err) {
@@ -91,7 +92,7 @@ export async function chatJson(chat, messages, schema, { temperature = 0.2, maxT
     withSchema.push({ role: 'user', content: schemaNote });
   }
   try {
-    const raw = await chat(withSchema, { temperature, maxTokens });
+    const raw = await chat(withSchema, { temperature, maxTokens, timeoutMs });
     const data = parseJsonFromText(raw);
     return data && typeof data === 'object' ? data : null;
   } catch (err) {

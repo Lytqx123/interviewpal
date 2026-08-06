@@ -2,10 +2,12 @@ export { ArchiveStore, createArchive } from './archive/store.js';
 export { ROUND_KEYS, JOB_TYPES, SCORE_DIMENSIONS, DIFFICULTY_CATEGORIES, CACHE_TTL_MS } from './archive/constants.js';
 export { newReviewRecord, emptyScores, emptyRoundState, emptyRounds } from './archive/entities.js';
 export { createLlm, chatJson, parseJsonFromText } from './llm/provider.js';
+export { createLlmFromEnv } from './llm/env.js';
 export { parseResume } from './parser/resume.js';
 export { parseJd } from './parser/jd.js';
 export { detectJobType, parseResumeByRules, parseJdByRules } from './parser/rules.js';
 export { createSearchProvider } from './search/provider.js';
+export { createSearchProviderFromEnv } from './search/env.js';
 export { enrichResume, enrichJd, collectResumeEntities, collectJdEntities } from './enrich/enrich.js';
 export { generatePlan } from './preanalysis/engine.js';
 export {
@@ -24,7 +26,8 @@ export { createSession, startInterview, nextQuestion, buildBaselinePlan, closeIn
 export { openingByRules, followupByRules, closingByRules, nextQuestionByRules } from './interviewer/rules.js';
 export { prepareRound2Context, enrichRound2Frontier, roundMetaFromPlan } from './interviewer/rounds.js';
 export { reviewInterview, compareWithLast, generateReport, formatReport, buildReviewPrompt, reviewWithMemory } from './coach/index.js';
-export { diagnoseBaseline, passRecommendation, analyzeRhythm, getQuestions, recommendByWeakness, exportReview, createInterviewerAgent, createCoachAgent } from './coach/index.js';
+export { analyzeRhythm, getQuestions, recommendByWeakness, exportReview, createInterviewerAgent, createCoachAgent } from './coach/index.js';
+export { generateSalaryReport, formatSalaryReport, checkSalaryTrigger } from './coach/index.js';
 export { handleResumeUpload, handleJdPaste, handleApply } from './onboarding/index.js';
 export { startVoiceServer, readVoiceConfig, loadEnvFile } from './voice/bridge.js';
 export { createMockDoubaoServer, buildServerFrame, makeBeepPcm } from './voice/mock.js';

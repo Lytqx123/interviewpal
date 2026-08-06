@@ -10,7 +10,6 @@ export function emptyRoundState() {
     lastPracticedAt: null,
     weakPoints: [],
     strengths: [],
-    ready: false, // 连续达标后置 true，建议进入下一轮
   };
 }
 

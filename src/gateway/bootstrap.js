@@ -12,6 +12,8 @@ import { createCommandRouter } from './router.js';
 import { createDualAgentOrchestrator } from './agents.js';
 import { createOfflineCache, createOfflineOutbox } from './outbox.js';
 import { isPairingError } from './protocol.js';
+import { createLlmFromEnv } from '../llm/env.js';
+import { createSearchProviderFromEnv } from '../search/env.js';
 
 const DEFAULT_GATEWAY_URL = 'ws://127.0.0.1:18789/ws';
 
@@ -69,6 +71,8 @@ export async function startGatewayBootstrap({
   const dataDir = cfg.dataDir;
 
   if (!store) store = new ArchiveStore(dataDir);
+  if (!llm) llm = createLlmFromEnv(process.env, path.join(process.cwd(), '.env.local'));
+  if (!search) search = createSearchProviderFromEnv(process.env);
   if (!coordination) {
     coordination = createVoiceCoordination({ store, llm, search, log: logger });
   }

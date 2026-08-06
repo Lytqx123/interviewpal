@@ -342,6 +342,36 @@ test('命令路由：上传简历 → 粘贴 JD → 投递 → 开始一面 → 
   assert.equal(unknown.intent, 'unknown');
 });
 
+test('命令路由：薪资建议解析当前薪资（20万 / 当前20万 / 无则 null）', async (t) => {
+  const dir = tmpDir(t);
+  const store = new ArchiveStore(dir);
+  seedStore(store);
+  const { companyId } = store.createCompany({ name: '星辰科技' });
+  const { positionId } = store.createPosition(companyId, { title: '高级后端工程师', jobType: 'tech' });
+  // 至少一场复盘即可触发
+  store.saveReview({
+    reviewId: 'rv-salary-1', companyId, positionId, roundKey: 'round1',
+    scores: { logic: 4, relevance: 4, depth: 3.5, fluency: 3, interaction: 3.5, confidence: 3.5 },
+    createdAt: '2026-08-01T10:00:00Z',
+  });
+  const router = createCommandRouter({ store, log: silent });
+
+  const r1 = await router.route('星辰科技 薪资建议 20万');
+  assert.equal(r1.ok, true);
+  assert.equal(r1.intent, 'salary');
+  assert.equal(r1.data.currentSalary, 20, '「20万」应解析为 20');
+
+  const r2 = await router.route('星辰科技 薪资建议 当前薪资25万');
+  assert.equal(r2.ok, true);
+  assert.equal(r2.data.currentSalary, 25, '「当前薪资25万」应解析为 25');
+
+  const r3 = await router.route('星辰科技 薪资建议');
+  assert.equal(r3.ok, true);
+  assert.equal(r3.data.currentSalary, null, '未带薪资时应为 null');
+  // 未练轮次应标注
+  assert.match(r3.reply, /未练/);
+});
+
 test('离线发件箱：入队 → 真实网关补发 → 清空（§4.5 离线兜底）', async (t) => {
   const dir = tmpDir(t);
   const server = await createMockGatewayServer();

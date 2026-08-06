@@ -5,7 +5,6 @@
 //   - CoachAgent：负责复盘评估，有记忆、读写档案库
 import { createSession, startInterview, nextQuestion, closeInterview } from '../interviewer/index.js';
 import { reviewWithMemory } from './memory.js';
-import { diagnoseBaseline, passRecommendation } from './baseline.js';
 import { analyzeRhythm } from './rhythm.js';
 
 // 面试官 Agent：无状态工厂。每场 createSession 独立，不读历史（失忆）。
@@ -42,14 +41,6 @@ export function createCoachAgent({ store, llm = null, reply = null } = {}) {
     // 复盘一场面试并写入档案库 + 回传渠道
     async review(session, { companyId, positionId, roundKey }) {
       return reviewWithMemory(session, { store, companyId, positionId, roundKey, llm, reply });
-    },
-    // 基线诊断
-    diagnose({ companyId, positionId }) {
-      return diagnoseBaseline({ store, companyId, positionId });
-    },
-    // 通关建议
-    passAdvise({ companyId, positionId, roundKey }) {
-      return passRecommendation({ store, companyId, positionId, roundKey });
     },
     // 表达节奏分析
     rhythm(session) {

@@ -20,6 +20,7 @@ import { prepareRound2Context } from '../src/interviewer/rounds.js';
 import { reviewWithMemory } from '../src/coach/memory.js';
 import { formatReport } from '../src/coach/report.js';
 import { getQuestions } from '../src/coach/questionBank.js';
+import { createLlmFromEnv } from '../src/llm/env.js';
 
 const MOCK_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data/mock');
 
@@ -53,7 +54,7 @@ function planSummary(plan) {
   ].join('\n');
 }
 
-async function runInterview({ store, plan, resumeProfile, jobProfile, companyId, positionId, roundKey, answers, search = null }) {
+async function runInterview({ store, plan, llm, resumeProfile, jobProfile, companyId, positionId, roundKey, answers, search = null }) {
   const roundContext = roundKey === 'round2'
     ? await prepareRound2Context({ store, search, companyId, positionId })
     : null;
@@ -62,7 +63,7 @@ async function runInterview({ store, plan, resumeProfile, jobProfile, companyId,
     jobProfile,
     roundKey,
     maxDepth: 3,
-    llm: null,
+    llm,
     roundContext,
     preanalysisPlan: plan,
   });
@@ -95,10 +96,13 @@ export async function runDemo({ dir = MOCK_DIR, storeDir = null, reset = true, l
 
   const seeded = await seedDemoData({ dir, storeDir, reset, log: { info: () => {} } });
   const { store, manifest, summary } = seeded;
+  const llm = createLlmFromEnv(process.env, path.join(process.cwd(), '.env.local'));
+  const llmMode = llm ? '真实 LLM' : '规则兜底';
   const demo = manifest.demo;
 
   p('════════════════════════════════════════════');
   p('InterviewPal · 端到端演示剧本（mock 模式，无 key）');
+  p(`推理模式：${llmMode}${llm ? '（已读取 LLM_API_KEY，走真实模型）' : '（未配置文本 LLM key，走规则兜底）'}`);
   p('════════════════════════════════════════════');
   p();
 
@@ -142,7 +146,7 @@ export async function runDemo({ dir = MOCK_DIR, storeDir = null, reset = true, l
   const company = store.getCompany(companyEntry.companyId);
   const position = store.getPosition(companyEntry.companyId, positionEntry.positionId);
 
-  const first = await generatePlan({ resumeVersion, company, position, llm: null, store });
+  const first = await generatePlan({ resumeVersion, company, position, llm, store });
   const plan = first.plan;
   p(`【4. 预分析七大层（${first.source}，${first.cached ? '缓存命中' : '重新生成'}）】`);
   p(planSummary(plan));
@@ -159,6 +163,7 @@ export async function runDemo({ dir = MOCK_DIR, storeDir = null, reset = true, l
   const round1 = await runInterview({
     store,
     plan,
+    llm,
     resumeProfile: resumeVersion.profile ?? {},
     jobProfile,
     companyId: company.companyId,
@@ -183,10 +188,10 @@ export async function runDemo({ dir = MOCK_DIR, storeDir = null, reset = true, l
   p('【6. 一面复盘报告（六维 + 逐题点评 + 方向偏差）】');
   const review1 = await reviewWithMemory(round1.session, {
     store,
+    llm,
     companyId: company.companyId,
     positionId: position.positionId,
     roundKey: 'round1',
-    llm: null,
     resumeVersionId: resumeVersion.versionId,
   });
   p(review1.report);
@@ -202,6 +207,7 @@ export async function runDemo({ dir = MOCK_DIR, storeDir = null, reset = true, l
   const round2 = await runInterview({
     store,
     plan,
+    llm,
     resumeProfile: resumeVersion.profile ?? {},
     jobProfile,
     companyId: company.companyId,
@@ -220,10 +226,10 @@ export async function runDemo({ dir = MOCK_DIR, storeDir = null, reset = true, l
   p('【二面复盘】');
   const review2 = await reviewWithMemory(round2.session, {
     store,
+    llm,
     companyId: company.companyId,
     positionId: position.positionId,
     roundKey: 'round2',
-    llm: null,
     resumeVersionId: resumeVersion.versionId,
   });
   p(review2.report);
@@ -243,7 +249,7 @@ export async function runDemo({ dir = MOCK_DIR, storeDir = null, reset = true, l
 
   // ---------- 9. 预分析缓存命中 ----------
   p('【9. 预分析缓存命中场景（同公司同岗位二次生成）】');
-  const again = await generatePlan({ resumeVersion, company, position, llm: null, store });
+  const again = await generatePlan({ resumeVersion, company, position, llm, store });
   p(`  第一次：${first.source}；第二次：${again.source}${again.cached ? '（缓存命中，秒出）' : ''}`);
   p(`  缓存键：${again.cacheKey}`);
   p();

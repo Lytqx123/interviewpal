@@ -1,12 +1,22 @@
 // 预分析 LLM Prompt：面试前一次 LLM 调用，输出七大层定制化面试计划。
 // 四要素：公司 + 岗位 + 简历 + 岗位要求；XML 标签分片；JSON Schema 输出约束。
-import { PREANALYSIS_SCHEMA, MIN_SUB_DIMENSIONS } from './schema.js';
+import { MIN_SUB_DIMENSIONS } from './schema.js';
 import { summarizeFeedbackForPrompt } from '../coach/feedback.js';
+
+// 紧凑英文键名骨架：约束模型使用 schema 要求的英文键（值为中文内容）。
+// 相比内嵌完整 JSON Schema（约 30KB），本骨架约 3KB，显著降低生成延迟。
+const SCHEMA_SKELETON = `输出 JSON 必须使用以下英文键名（值用中文填写）：
+layers.jdAnalysis = { roleNature, level, coreResponsibilities[], hiddenRequirements[], redLines[], industryContext, companyStage, hiringPain }
+layers.candidateProfile = { radar: { technicalDepth, technicalBreadth, businessSense, communication, leadership, learning }（1-5 整数）, credibility: [{ summary, level: high|medium|low, verifyFocus }], highlights: [{ experience, depthDirection, expectedDepth }], weaknesses: [{ point, probeApproach }], exaggerationWarnings: [{ statement, howToVerify }], skillDepth: [{ skill, depth: 了解|能干|精通|能讲清底层原理 }], fitAnalysis: { strongMatches[], weakMatches[], missingItems[] }, careerTrajectory, likelyStuck[] }
+layers.interviewerPersona.round1|round2|round3 = { identity, background, style, focus, bias, killerQuestions[], questionPattern }
+layers.roundStrategy.round1|round2|round3 = { dimensions: [{ name, excellent, failing }], followupChains: [{ id, dimension, depthTarget, keyQuestions[], chain: [{ level: shallow|medium|deep, question, intent, qualityAnchor }] }], opening: { style, firstQuestion }, stressTest: { point, method, recovery }, scenarioDesign: { scenario, question }, timeAllocation, dedupList[] }
+layers.riskForecast = { likelyStuck: [{ question, suggestion, rescue }], exaggerationPoints: [{ claim, verifyApproach, depthNeeded }], trapQuestions: [{ question, intent, expectedDirection }], crossRoundRisks: [{ fromRound, risk, followupRound }], candidateQuestions: [{ question, interviewerAnswer }], extremePlans: [{ situation, response }] }
+layers.reviewFramework = { dimensions[], bars: { logic, relevance, depth, fluency, interaction, confidence: { expectedScore, lowAnchor, highAnchor } }, coverageChecklist[], deviationDimensions[], progressComparison, hitRateCheck }
+layers.rhythmDesign.round1|round2|round3 = { curve, pressureGradient, positiveFeedback, durationAndCount }`;
 
 export function buildPreAnalysisPrompt({ resumeVersion, company, position, historicalFeedback = [] }) {
   const resumeProfile = resumeVersion?.profile ?? {};
   const jobProfile = position?.profile ?? {};
-  const schemaText = JSON.stringify(PREANALYSIS_SCHEMA, null, 2);
 
   const system = `你是一名资深求职面试陪练系统的预分析引擎。
 面试开始前，你需要根据「简历版本 + 目标公司 + 目标岗位」生成一份覆盖七大深度层的定制化面试计划——它是面试官面试前读简历形成的判断与执行基线，不是通用题库。
@@ -55,7 +65,9 @@ ${historicalFeedback
 </historical_feedback>
 `
   : ''}
-请严格按以下 JSON Schema 输出：\n${schemaText}`;
+顶层结构必须为：{"layers": {"jdAnalysis": {...}, "candidateProfile": {...}, "interviewerPersona": {"round1": {...}, "round2": {...}, "round3": {...}}, "roundStrategy": {"round1": {...}, "round2": {...}, "round3": {...}}, "riskForecast": {...}, "reviewFramework": {...}, "rhythmDesign": {"round1": {...}, "round2": {...}, "round3": {...}}}}
+${SCHEMA_SKELETON}
+请按上述七大层字段结构输出一个合法的 JSON 对象（只输出 JSON 本身，不要解释、不要 markdown 围栏）。`;
 
   return [
     { role: 'system', content: system },

@@ -16,6 +16,11 @@ import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createMockDoubaoServer } from './mock.js';
+import { ArchiveStore } from '../archive/store.js';
+import { createVoiceCoordination } from './coordination.js';
+import { createLlmFromEnv } from '../llm/env.js';
+import { createSearchProviderFromEnv } from '../search/env.js';
+import { loadEnvFile } from '../config/env.js';
 import {
   buildControlFrame,
   parseFrame,
@@ -52,29 +57,7 @@ const DEFAULT_SESSION = {
   model: '1.2.1.1', // O2.0 版本
 };
 
-/** 解析简单 KEY=VALUE 环境文件（不做插值、不做引号转义）。 */
-export function loadEnvFile(file = DEFAULT_ENV_FILE) {
-  try {
-    const text = fs.readFileSync(file, 'utf8');
-    const out = {};
-    for (const line of text.split(/\r?\n/)) {
-      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-      if (!m) continue;
-      let value = m[2];
-      if (value.startsWith('#') || value === '') continue;
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value.slice(1, -1);
-      }
-      out[m[1]] = value;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
+export { loadEnvFile };
 
 /** 汇总配置：进程环境变量优先，其次 .env.voice.local。 */
 export function readVoiceConfig(env = process.env, envFile = DEFAULT_ENV_FILE) {
@@ -82,7 +65,7 @@ export function readVoiceConfig(env = process.env, envFile = DEFAULT_ENV_FILE) {
   const truthy = (v) => v != null && /^(1|true|yes|on)$/i.test(String(v).trim());
   return {
     appId: (merged.DOUBAO_APP_ID || '').trim(),
-    accessKey: (merged.DOUBAO_ACCESS_KEY || '').trim(),
+    accessKey: (merged.DOUBAO_ACCESS_KEY || merged.DOUBAO_API_KEY || '').trim(),
     appKey: (merged.DOUBAO_APP_KEY || '').trim() || DEFAULT_APP_KEY,
     resourceId: (merged.DOUBAO_RESOURCE_ID || '').trim() || 'volc.speech.dialog',
     target: (merged.DOUBAO_WS_URL || '').trim() || DEFAULT_TARGET,
@@ -504,8 +487,14 @@ const isMain =
 if (isMain) {
   const cfg = readVoiceConfig();
   const port = Number(process.env.VOICE_PORT) || 8780;
-  const { url } = await startVoiceServer({ port, config: cfg });
+  // 真实使用接线：本地档案库 + 文本 LLM（有 key 真实、无 key 兜底）+ 检索层
+  const store = new ArchiveStore(path.join(process.cwd(), 'data', 'voice'));
+  const llm = createLlmFromEnv(process.env, path.join(process.cwd(), '.env.local'));
+  const search = createSearchProviderFromEnv(process.env);
+  const coordination = createVoiceCoordination({ store, llm, search });
+  const { url } = await startVoiceServer({ port, config: cfg, coordination });
   const mode = cfg.mock ? 'Mock（本地模拟，无需真实凭据）' : cfg.appId ? '真实服务（服务端凭据）' : '真实服务（等待页面填写凭据）';
   console.log(`[voice] 已启动: ${url}/voice/call.html  [${mode}]`);
+  console.log(`[voice] 文本 LLM：${llm ? '已接线（真实模型）' : '未配置，走规则兜底'}；检索层：${search.name}`);
   console.log('[voice] 浏览器打开上面的地址，点击“开始通话”即可联调。');
 }
