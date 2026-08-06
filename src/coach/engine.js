@@ -93,7 +93,7 @@ function normalizeReviewResult(data) {
   };
 }
 
-// 生成文本报告（飞书消息卡片可读）
+// 生成文本报告（渠道可读）
 export function generateReport(reviewResult, { session } = {}) {
   return formatReport(reviewResult, { session });
 }

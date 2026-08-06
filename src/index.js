@@ -20,8 +20,6 @@ export {
 export { buildPreAnalysisPrompt } from './strategy/prompts.js';
 export { buildRulesPlan } from './strategy/rules.js';
 export { strategyCacheKey } from './strategy/cache.js';
-export { detectCommand, helpText } from './feishu/commands.js';
-export { createMessageHandler } from './feishu/handler.js';
 export { handleResumeUpload, handleJdPaste, handleApply } from './onboarding/index.js';
 export { startVoiceServer, readVoiceConfig, loadEnvFile } from './voice/bridge.js';
 export { createMockDoubaoServer, buildServerFrame, makeBeepPcm } from './voice/mock.js';

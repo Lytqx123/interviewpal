@@ -1,4 +1,4 @@
-// 六维报告格式化：生成飞书消息卡片可读的文本报告。
+// 六维报告格式化：生成渠道可读的文本报告。
 import { SCORE_RUBRIC } from './rules.js';
 
 const PROGRESS_LABEL = { up: '↑ 进步', down: '↓ 退步', flat: '→ 持平' };

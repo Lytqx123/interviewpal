@@ -39,7 +39,7 @@ export function createCoachAgent({ store, llm = null, reply = null } = {}) {
     name: 'coach',
     memory: 'full', // 全记忆：读写档案库历史
     store,
-    // 复盘一场面试并写入档案库 + 回传飞书
+    // 复盘一场面试并写入档案库 + 回传渠道
     async review(session, { companyId, positionId, roundKey }) {
       return reviewWithMemory(session, { store, companyId, positionId, roundKey, llm, reply });
     },

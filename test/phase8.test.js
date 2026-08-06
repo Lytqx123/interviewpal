@@ -7,8 +7,6 @@ import path from 'node:path';
 import { createSession, startInterview, askFollowup, followupByRules, prepareRound2Context } from '../src/interviewer/index.js';
 import { diagnoseBaseline, passRecommendation, analyzeRhythm, getQuestions, recommendByWeakness, exportReview, createInterviewerAgent, createCoachAgent } from '../src/coach/index.js';
 import { ArchiveStore } from '../src/archive/index.js';
-import { parseRoundCommand } from '../src/feishu/commands.js';
-import { createMessageHandler } from '../src/feishu/handler.js';
 
 const RESUME = {
   basics: { name: '李四', title: '后端工程师' },
@@ -236,56 +234,5 @@ describe('阶段八 · P1 双 Agent 物理拆分', () => {
 
   it('CoachAgent 缺 store 报错', () => {
     assert.throws(() => createCoachAgent({}), /store/);
-  });
-});
-
-describe('阶段八 · 飞书轮次状态命令', () => {
-  it('parseRoundCommand：解析轮次 + 公司 + 岗位', () => {
-    const r = parseRoundCommand('练二面 星辰科技 后端工程师');
-    assert.equal(r.roundKey, 'round2');
-    assert.equal(r.companyName, '星辰科技');
-    assert.equal(r.positionTitle, '后端工程师');
-    assert.equal(parseRoundCommand('练三面 X公司').roundKey, 'round3');
-    assert.equal(parseRoundCommand('你好'), null);
-  });
-
-  it('query_progress 命令返回进度', async (t) => {
-    const store = tmpStore(t);
-    const company = store.createCompany({ name: '星辰科技' });
-    store.createPosition(company.companyId, { title: '后端', jobType: 'tech' });
-    const handler = createMessageHandler({ store });
-    const out = await handler({ text: '查进度 星辰科技' });
-    assert.ok(out.text.includes('星辰科技 面试进度'), '返回进度');
-    assert.ok(out.text.includes('一面'), '含轮次');
-  });
-
-  it('practice_round 二面命令返回业务面参考资料', async (t) => {
-    const store = tmpStore(t);
-    const company = store.createCompany({ name: '星辰科技' });
-    const pos = store.createPosition(company.companyId, { title: '后端工程师', jobType: 'tech' });
-    store.updatePosition(company.companyId, pos.positionId, { profile: { responsibilities: ['负责订单系统设计'], requirements: [], keywords: [] } });
-    const handler = createMessageHandler({ store });
-    const out = await handler({ text: '练二面 星辰科技 后端工程师' });
-    assert.ok(out.text.includes('二面'), '二面命令');
-    assert.ok(out.text.includes('岗位职责'), '含岗位职责');
-    assert.ok(out.text.includes('前沿探索题'), '含前沿探索题说明');
-  });
-
-  it('两家公司信息隔离：A 公司进度不串到 B 公司', async (t) => {
-    const store = tmpStore(t);
-    const a = store.createCompany({ name: 'A公司' });
-    const b = store.createCompany({ name: 'B公司' });
-    const posA = store.createPosition(a.companyId, { title: '后端', jobType: 'tech' });
-    const posB = store.createPosition(b.companyId, { title: '前端', jobType: 'tech' });
-    store.saveReview({ reviewId: 'rvA', companyId: a.companyId, positionId: posA.positionId, roundKey: 'round1', scores: { logic: 4, relevance: 4, depth: 4, fluency: 4, interaction: 4, confidence: 4 }, improvementList: [], difficultQuestions: [], createdAt: '2026-08-01T00:00:00Z' });
-    store.recordRoundSession(a.companyId, posA.positionId, 'round1', { sessionId: 'sA', reviewId: 'rvA' });
-    const handler = createMessageHandler({ store });
-    const outB = await handler({ text: '查进度 B公司' });
-    assert.ok(!outB.text.includes('A公司'), 'B 公司进度不含 A 公司信息');
-    assert.ok(outB.text.includes('B公司'), '只含 B 公司');
-    // B 公司岗位轮次次数应为 0（不受 A 影响）
-    assert.equal(store.getPosition(b.companyId, posB.positionId).rounds.round1.completedCount, 0, 'B 公司轮次不受 A 影响');
-    // A 公司轮次次数仍为 1（不受 B 影响）
-    assert.equal(store.getPosition(a.companyId, posA.positionId).rounds.round1.completedCount, 1, 'A 公司轮次保持 1');
   });
 });

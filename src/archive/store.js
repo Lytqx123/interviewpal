@@ -206,7 +206,7 @@ export class ArchiveStore {
     return company;
   }
 
-  // 按名字找公司：飞书命令里用户可能直接说"粘贴 XX 公司 JD"，不用再手动建公司
+  // 按名字找公司：命令里用户可能直接说"粘贴 XX 公司 JD"，不用再手动建公司
   findCompanyByName(name) {
     if (!name) return null;
     return this.listCompanies({ includeArchived: true }).find((c) => c.name === name) ?? null;

@@ -3,7 +3,7 @@
 import { formatReport } from './report.js';
 import { SCORE_RUBRIC } from './rules.js';
 
-// 导出复盘记录：text（飞书可读）/ markdown（文档存档）。
+// 导出复盘记录：text（渠道可读）/ markdown（文档存档）。
 export function exportReview(record, { session, format = 'text' } = {}) {
   const header = buildHeader(record, format);
   if (format === 'markdown') {

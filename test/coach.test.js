@@ -339,8 +339,8 @@ describe('复盘教练 · 阶段七记忆闭环（编排层）', () => {
     assert.ok(ic.completed >= 1, `至少 1 项改进完成（实际 ${ic.completed}）`);
     // 改进清单可勾选
     assert.ok(r2.result.improvementList.every((i) => 'checked' in i), '改进清单可勾选');
-    // 报告回传飞书
-    assert.equal(replied.length, 1, '报告已回传飞书');
+    // 报告回传渠道
+    assert.equal(replied.length, 1, '报告已回传渠道');
     assert.ok(replied[0].includes('与上次对比'), '回传报告含与上次对比');
     // 档案库 2 条记录、轮次次数 2
     assert.equal(store.listReviews({ companyId: company.companyId, positionId: pos.positionId, roundKey: 'round1' }).length, 2, '档案库 2 条记录');
