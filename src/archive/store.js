@@ -12,20 +12,20 @@ const POSITION_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const VERSION_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 /**
- * 档案库（文件存储核心），对应方案书 §5.6 的树状组织 + §5.8 的档案库组件。
+ * 档案库（文件存储核心）：按「全局层 → 公司 → 岗位 → 轮次」树状组织，承担全部记忆。
  *
  * 目录结构（按公司隔离）：
  *   <root>/
  *     user.json                       全局层：用户画像（跟人走）
- *     resumes/<versionId>.json        简历版本快照（全局层，创建即不可变，§5.2）
+ *     resumes/<versionId>.json        简历版本快照（全局层，创建即不可变）
  *     companies/<companyId>/
  *       company.json                  公司画像
  *       positions/<positionId>.json   岗位画像（含轮次状态、次数）
- *       applications/*.json           投递快照（投递即冻结，§5.2）
- *       cache/<roundKey>.json         检索缓存（按轮次打标签，§5.5）
- *       reviews/*.json                复盘记录（§5.7/§5.9）
+ *       applications/*.json           投递快照（投递即冻结）
+ *       cache/<roundKey>.json         检索缓存（按轮次打标签）
+ *       reviews/*.json                复盘记录（六维复盘 / 困难点沉淀）
  *
- * 先用 JSON 文件 + 目录当存储（档案库 §5.2/§5.6）：零依赖、可以直接看、可以手工改。
+ * 先用 JSON 文件 + 目录当存储（档案库）：零依赖、可以直接看、可以手工改。
  * 后面场次多起来或者要并发写，再换 SQLite / OpenClaw 自带的 memory 机制。
  */
 export class ArchiveStore {
@@ -117,7 +117,7 @@ export class ArchiveStore {
     return data;
   }
 
-  // ---------- 简历画像（全局层，跟人走，§3.3/§5.3） ----------
+  // ---------- 简历画像（全局层，跟人走） ----------
 
   // 简历画像是"人"的属性，不是公司/岗位的属性：
   // 一份简历可以投多家公司，所以放在全局层，和 user.json 平级。
@@ -138,7 +138,7 @@ export class ArchiveStore {
     return data;
   }
 
-  // ---------- 简历版本（全局层，版本不可变，§5.2） ----------
+  // ---------- 简历版本（全局层，版本不可变） ----------
 
   // 版本对象故意不提供 update 接口：想改简历 = 新建版本，旧版本永远保留。
   // 版本可投多家公司；某公司一旦收到某版本，就绑定该版本（投递即冻结）。
@@ -238,7 +238,7 @@ export class ArchiveStore {
     return includeArchived ? companies : companies.filter((c) => !c.archived);
   }
 
-  // 焦点公司同时只有一家，设置时把其它公司都取消（§5.6）
+  // 焦点公司同时只有一家，设置时把其它公司都取消
   setFocusCompany(companyId) {
     this.assertCompanyId(companyId);
     for (const company of this.listCompanies({ includeArchived: true })) {
@@ -251,7 +251,7 @@ export class ArchiveStore {
     return this.updateCompany(companyId, { archived });
   }
 
-  // 删除公司：整目录移除 + 该公司所有岗位的预分析缓存联动释放（§5.4）。
+  // 删除公司：整目录移除 + 该公司所有岗位的预分析缓存联动释放。
   // companyId 已通过 assertCompanyId 白名单校验，目标路径安全可控。
   deleteCompany(companyId) {
     this.assertCompanyId(companyId);
@@ -278,9 +278,9 @@ export class ArchiveStore {
       title,
       jdText,
       jobType,
-      // 目标岗位画像：真实 JD 职责/要求/关键词，由联网补全模块填充（§5.3）
+      // 目标岗位画像：真实 JD 职责/要求/关键词，由联网补全模块填充
       profile: { responsibilities: [], requirements: [], keywords: [] },
-      resumeVersionId: null, // 投递后绑定终版简历（§5.2）
+      resumeVersionId: null, // 投递后绑定终版简历
       rounds: emptyRounds(),
       createdAt: now,
       updatedAt: now,
@@ -294,7 +294,7 @@ export class ArchiveStore {
     return this.readJson(path.join(this.companyDir(companyId), 'positions', `${positionId}.json`), null);
   }
 
-  // 删除岗位：岗位文件移除 + 该岗位的预分析缓存联动释放（§5.4）。
+  // 删除岗位：岗位文件移除 + 该岗位的预分析缓存联动释放。
   deletePosition(companyId, positionId) {
     this.assertCompanyId(companyId);
     this.assertPositionId(positionId);
@@ -336,7 +336,7 @@ export class ArchiveStore {
     return position?.rounds[roundKey] ?? null;
   }
 
-  // 一轮练完，次数 +1（同一轮次可反复练，§5.4）。复盘记录单独存 review。
+  // 一轮练完，次数 +1（同一轮次可反复练）。复盘记录单独存 review。
   recordRoundSession(companyId, positionId, roundKey, { sessionId, reviewId = null } = {}) {
     this.assertRoundKey(roundKey);
     const position = this.getPosition(companyId, positionId);
@@ -349,7 +349,7 @@ export class ArchiveStore {
     return this.updatePosition(companyId, positionId, { rounds: position.rounds });
   }
 
-  // ---------- 投递快照（投递即冻结，§5.2） ----------
+  // ---------- 投递快照（投递即冻结） ----------
 
   createApplication(companyId, { positionId, resumeVersionId, resumeSnapshotText = '' } = {}) {
     if (!positionId || !resumeVersionId) {
@@ -369,7 +369,7 @@ export class ArchiveStore {
       throw new Error('company already has an application, 投递即冻结：不可更换简历版本');
     }
 
-    // 没传快照文本时，直接取版本原文做快照——模拟练的就是投出去的那份（§5.2）。
+    // 没传快照文本时，直接取版本原文做快照——模拟练的就是投出去的那份。
     const snapshotText = resumeSnapshotText || version.rawText;
     const applicationId = newId('a');
     const now = new Date().toISOString();
@@ -396,7 +396,7 @@ export class ArchiveStore {
       application,
     );
 
-    // 岗位绑定这份终版简历：模拟始终练投出去的那份（§5.2）
+    // 岗位绑定这份终版简历：模拟始终练投出去的那份
     this.updatePosition(companyId, positionId, { resumeVersionId });
     return application;
   }
@@ -409,7 +409,7 @@ export class ArchiveStore {
     return apps[0] ?? null;
   }
 
-  // 全局审计用：扫所有公司目录（§5.2 的审计链）
+  // 全局审计用：扫所有公司目录（投递审计链）
   listApplications() {
     const out = [];
     for (const companyId of this.listCompanyIds()) {
@@ -419,7 +419,7 @@ export class ArchiveStore {
     return out;
   }
 
-  // ---------- 检索缓存（按公司 + 轮次隔离，§5.3/§5.5） ----------
+  // ---------- 检索缓存（按公司 + 轮次隔离） ----------
 
   getCache(companyId, roundKey) {
     this.assertRoundKey(roundKey);
@@ -472,7 +472,7 @@ export class ArchiveStore {
     }
   }
 
-  // ---------- 预分析缓存（七大层面试计划，§5.4/§5.5） ----------
+  // ---------- 预分析缓存（七大层面试计划） ----------
 
   preanalysisCachePath() {
     return path.join(this.root, PREANALYSIS_CACHE_FILE);
@@ -553,7 +553,7 @@ export class ArchiveStore {
     return changed;
   }
 
-  // ---------- 复盘记录（§5.7/§5.9） ----------
+  // ---------- 复盘记录（六维复盘 / 困难点沉淀） ----------
 
   saveReview(review) {
     if (!review?.companyId) throw new Error('review.companyId required');

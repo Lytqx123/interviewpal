@@ -1,4 +1,4 @@
-// 面试官规则兜底（方案书 §5.5）。
+// 面试官规则兜底（通用模板，不区分岗位类型）。
 // LLM 不可用或预分析缺失时，降级为通用模板——不区分岗位类型、不预设轮次策略，
 // 追问方向统一为：关键经历 STAR 展开 → 实现细节与决策理由 → 极端场景与对比方案。
 
@@ -14,7 +14,7 @@ function pickSkill(resumeProfile) {
   return skills[0] ?? null;
 }
 
-// 开场白按轮次定位（方案书 §5.4：一面简历面 / 二面业务面 / 三面总监交叉面）
+// 开场白按轮次定位（一面简历面 / 二面业务面 / 三面总监交叉面）
 const ROUND_INTROS = {
   round1: '我看过你的简历，对你申请的这个岗位很感兴趣，我们先聊聊你的经历。',
   round2: '前面一面同事已经和你聊过基础情况，今天我们重点聊聊业务和项目层面的东西。',
@@ -44,7 +44,7 @@ export function openingByRules({ resumeProfile, jobProfile, roundKey }) {
   };
 }
 
-// ============ 规则兜底追问：通用三层模板（方案书 §5.5，不区分岗位类型） ============
+// ============ 规则兜底追问：通用三层模板（不区分岗位类型） ============
 
 const FALLBACK_FOLLOWUP_LEVELS = [
   {
@@ -110,8 +110,8 @@ function ackByRules(answer) {
   return '好的，我了解了。';
 }
 
-// ============ 预分析策略模式（方案书 §5.4：以预分析为基线，实时动态调整） ============
-// 预分析缺失时显式降级为上方通用模板（方案书 §5.5 规则兜底）。
+// ============ 预分析策略模式（以预分析为基线，实时动态调整） ============
+// 预分析缺失时显式降级为上方通用模板（规则兜底）。
 // 决策：继续（消费 baseline）→ 追问（④层追问链深档）→ 降档/拉回/换线 → 结束。
 
 function askedQuestions(session) {
@@ -190,7 +190,7 @@ function switchLine(session, baseline) {
 }
 
 // 策略模式决策入口：每条追问链最多 1 次档位调整；换线需 2 个信号叠加
-// （难度高+流畅差+浅薄，或偏题+浅薄）——防止面试跳跃（方案书 §5.4 风险对策）。
+// （难度高+流畅差+浅薄，或偏题+浅薄）——防止面试跳跃。
 export function nextQuestionByRules(session, signals) {
   const baseline = session.baselinePlan?.items ?? [];
   const currentId = session.currentMainlineId;

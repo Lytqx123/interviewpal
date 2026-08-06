@@ -1,15 +1,15 @@
-// 面试官 LLM system prompt 构建（方案书 §5.5：每轮提示词由预分析驱动，引擎只有一套）。
+// 面试官 LLM system prompt 构建：每轮提示词由预分析驱动，引擎只有一套。
 // 组装顺序：全局上下文 → 预分析全局层（①②⑤）→ 预分析轮次层（③④⑦）→ 当次数据。
-// 一次只问一个问题，追问方向由预分析④层追问链驱动；规则回退模式用通用模板（§5.5）。
+// 一次只问一个问题，追问方向由预分析④层追问链驱动；规则回退模式用通用模板。
 
-// 轮次定位（方案书 §5.4：一面简历面 / 二面业务面 / 三面总监交叉面）
+// 轮次定位（一面简历面 / 二面业务面 / 三面总监交叉面）
 const ROUND_DESC = {
   round1: '一面（简历面）：聚焦简历经历的真实性、技能栈基础、项目细节。目标是验证候选人"写的是不是真的"。',
   round2: '二面（业务面）：聚焦岗位匹配度、业务场景、项目深度。目标是验证"能不能胜任这个岗位"。',
   round3: '三面（总监交叉面）：聚焦价值观、抗压能力、职业规划、综合判断。目标是验证"适不适合这个团队"。',
 };
 
-// 二面业务面上下文块（方案书 §5.4：目标岗位画像 + §5.3 联网补全的公司业务/前沿话题）
+// 二面业务面上下文块（目标岗位画像 + 联网补全的公司业务/前沿话题）
 function roundContextBlock(roundContext) {
   if (!roundContext) return '';
   const { responsibilities = [], companyBusiness = [], frontierTopics = [] } = roundContext;
@@ -22,7 +22,7 @@ function roundContextBlock(roundContext) {
   return lines.join('\n') + '\n';
 }
 
-// ============ 预分析作战地图注入 + 动态调整指令（方案书 §5.4/§5.5） ============
+// ============ 预分析作战地图注入 + 动态调整指令 ============
 
 export function preanalysisPlanBlock(session) {
   const plan = session?.preanalysisPlan;
@@ -49,7 +49,7 @@ export function preanalysisPlanBlock(session) {
 }
 
 export function dynamicAdjustmentInstruction() {
-  return `【动态调整指令】（方案书 §5.4：计划是基线，不是脚本）
+  return `【动态调整指令】（计划是基线，不是脚本）
 1. 候选人展现意外深度（超出预判）→ 突破计划深度，延伸追问到真正的能力边界
 2. 候选人暴露预分析未覆盖的新弱点 → 临时插入追问，探索新弱点的范围与影响
 3. 候选人严重卡壳（超出预判程度）→ 降低后续难度（深→中或中→浅），调用⑤层救援策略

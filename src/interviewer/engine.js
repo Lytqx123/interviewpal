@@ -1,6 +1,6 @@
-// 面试引擎：管理面试会话状态机，驱动开场白生成与动态追问（方案书 §5.4/§5.5）。
+// 面试引擎：管理面试会话状态机，驱动开场白生成与动态追问（轮次配置由预分析驱动）。
 // LLM 优先，规则兜底（与 parser 一致的双路径模式）。
-// 面试官"失忆"（方案书 §5.7）：每次 createSession 独立，不跨会话记忆。
+// 面试官"失忆"：每次 createSession 独立，不跨会话记忆（记忆全部外置到档案库）。
 //
 // 执行模型：读取预分析作战地图 → 从④层考察策略生成 baseline plan →
 // 执行中注入实时信号（difficulty/direction/depth/fluency）→ 动态决策
@@ -16,7 +16,7 @@ import { roundMetaFromPlan } from './rounds.js';
 export { ingestSignal };
 
 // 从预分析④层考察策略（roundStrategy[round].followupChains）生成有序 baseline 问题队列。
-// 二面额外注入 roundContext（公司业务 / 岗位职责 / 前沿话题，来源 §5.3 联网补全）。
+// 二面额外注入 roundContext（公司业务 / 岗位职责 / 前沿话题，来源联网补全）。
 function pickBaselineQuestion(chain, roundKey, roundContext) {
   const base = chain.keyQuestions?.[0] ?? chain.chain?.[0]?.question ?? `${chain.dimension}：请展开讲讲。`;
   if (roundKey !== 'round2' || !roundContext) return base;
@@ -36,7 +36,7 @@ function pickBaselineQuestion(chain, roundKey, roundContext) {
 }
 
 /**
- * 生成 baseline plan（方案书 §5.4：计划是基线，不是脚本）。
+ * 生成 baseline plan（计划是基线，不是脚本，执行中按实时信号动态调整）。
  * 题目全部来自④层考察策略的追问链，每轮 ≥5 条。
  */
 export function buildBaselinePlan(preanalysisPlan, roundKey = 'round1', roundContext = null) {
@@ -167,7 +167,7 @@ export async function nextQuestion(session, candidateAnswer) {
     }
     if (!result) result = decision;
   } else {
-    // 规则回退模式：保持双路径（LLM 优先，规则兜底，方案书 §5.5）。
+    // 规则回退模式：保持双路径（LLM 优先，规则兜底）。
     if (session.llm) {
       try {
         const systemPrompt = buildFollowupPrompt(session, candidateAnswer, signals);

@@ -1,5 +1,5 @@
-// 记忆闭环编排层（方案书 §5.7：记忆闭环与困难题沉淀）。
-// 把"教练复盘（§5.7）"和"档案库（§5.2/§5.6）"、"渠道回传"串成闭环：
+// 记忆闭环编排层（记忆闭环与困难题沉淀）。
+// 把"教练复盘"和"档案库"、"渠道回传"串成闭环：
 //   读同公司同轮次上次复盘 → 复盘评估 → 跨场次增强对比（重复题/改进项完成率/上次也卡壳）
 //   → 可勾选改进清单 → 写入档案库 + 更新轮次状态 → 报告回传渠道。
 //
@@ -51,7 +51,7 @@ export async function reviewWithMemory(session, {
   const record = buildReviewRecord(session, result, { companyId, positionId, roundKey });
   const saved = store.saveReview(record);
 
-  // 6. 更新轮次状态：次数+1、记录本场 sessionId / reviewId（§5.4）
+  // 6. 更新轮次状态：次数+1、记录本场 sessionId / reviewId
   store.recordRoundSession(companyId, positionId, roundKey, {
     sessionId: session.sessionId,
     reviewId: saved.reviewId,

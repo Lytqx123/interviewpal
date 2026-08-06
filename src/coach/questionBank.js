@@ -1,4 +1,4 @@
-// P1：高频问题库（方案书 §4.1）。
+// P1：高频问题库（按岗位 + 轮次推送，供重练与知识补给）。
 // 联网调研依据：Interview Question Bank——按岗位类型 + 轮次组织高频考点，
 // 配合弱项定向重练（闭环 Iterate）。供候选人自主练习与教练推荐重练用。
 import { SCORE_RUBRIC } from './rules.js';

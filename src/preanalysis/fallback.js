@@ -1,6 +1,5 @@
-// 预分析规则兜底（方案书 §5.4/§5.5）。
-// LLM 不可用或输出不合法时，用简历画像 + 目标岗位画像生成确定性的七大层骨架；
-// 按方案书 §5.5，规则兜底为"通用模板（不区分岗位类型）"——追问方向统一为
+// 预分析规则兜底：LLM 不可用或输出不合法时，用简历画像 + 目标岗位画像生成确定性的七大层骨架；
+// 规则兜底为"通用模板（不区分岗位类型）"——追问方向统一为
 // 关键经历 STAR 展开 → 实现细节与决策理由 → 极端场景与对比方案。
 
 const ROUND_LABEL = { round1: '一面简历面', round2: '二面业务面', round3: '三面总监交叉面' };
@@ -65,7 +64,7 @@ export function buildFallbackPlan({ resumeVersion, company, position }) {
     ],
     hiddenRequirements: ['抗压与多任务并行', '跨部门协作推动力', '对结果负责的闭环意识'],
     redLines: [...pick(requirements, 2), ...(requirements.length < 2 ? ['经验年限与职责匹配度'] : [])],
-    industryContext: `目标行业上下文待联网补全（§5.3）：影响考察侧重`,
+    industryContext: `目标行业上下文待联网补全：影响考察侧重`,
     companyStage: '公司阶段待联网补全：创业期重动手、成熟期重流程与协作',
     hiringPain: '为什么在招：业务扩张 / 团队补强（推断，待面试验证）',
   };
@@ -269,8 +268,8 @@ export function buildFallbackPlan({ resumeVersion, company, position }) {
       { question: '团队最看重什么？', interviewerAnswer: '结合岗位职责与团队现状回答' },
     ],
     extremePlans: [
-      { situation: '候选人完全答不上来', response: '降档 + 救援提示，记录为困难点（§5.9），不强行施压' },
-      { situation: '候选人引导话题到擅长领域', response: '先让展示，再在擅长领域施压测上限（§5.4 动态调整）' },
+      { situation: '候选人完全答不上来', response: '降档 + 救援提示，记录为困难点，不强行施压' },
+      { situation: '候选人引导话题到擅长领域', response: '先让展示，再在擅长领域施压测上限' },
     ],
   };
 

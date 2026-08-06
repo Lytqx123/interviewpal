@@ -1,4 +1,4 @@
-// 预分析缓存读写（方案书 §5.4）。
+// 预分析缓存读写：按「简历版本 + 公司 + 岗位」维度缓存，同一组合复用，删除公司/岗位时联动释放。
 // 键 = `resumeVersionId::companyId::positionId`；删除公司/岗位时由 store 联动释放。
 
 export function preanalysisCacheKey({ resumeVersion, companyId, positionId }) {

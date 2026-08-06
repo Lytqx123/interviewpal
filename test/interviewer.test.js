@@ -217,7 +217,7 @@ describe('面试官 · LLM 路径', () => {
   });
 });
 
-// ============ 预分析策略模式（方案书 §5.4：baseline + 实时信号 + 动态调整） ============
+// ============ 预分析策略模式（baseline + 实时信号 + 动态调整） ============
 
 function fallbackPlan() {
   return buildFallbackPlan({
@@ -241,7 +241,7 @@ function fallbackPlan() {
   });
 }
 
-describe('面试官 · 预分析策略模式（方案书 §5.4）', () => {
+describe('面试官 · 预分析策略模式', () => {
   const plan = fallbackPlan();
 
   it('createSession：不传 preanalysisPlan 显式回退规则模式，传了走策略模式', () => {

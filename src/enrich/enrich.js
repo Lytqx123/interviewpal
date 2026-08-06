@@ -1,9 +1,9 @@
 import { SEARCH_CACHE_TTL } from '../search/provider.js';
 
-// 联网补全基础版（§5.3）：首次上传时把简历里的公司/技术、JD 里的公司/职责
+// 联网补全基础版：首次上传时把简历里的公司/技术、JD 里的公司/职责
 // 拿去检索，结果带"检索时间 + 来源 + 置信度"写入检索缓存。
 //
-// 两条红线（§5.3）：
+// 两条红线：
 //  1. 只提交实体名（公司名/技术名），不提交个人信息；
 //  2. 检索结果只用于提问与验证，不替经历背书。
 
@@ -23,7 +23,7 @@ export function collectJdEntities(jobProfile) {
   if (jobProfile?.companyName) {
     entities.push({ kind: 'company', name: jobProfile.companyName });
   }
-  // 职责里往往藏着业务/产品线信息，二面业务面要用（§5.5）
+  // 职责里往往藏着业务/产品线信息，二面业务面要用
   for (const resp of jobProfile?.responsibilities ?? []) {
     entities.push({ kind: 'job', name: resp.slice(0, 30) });
   }

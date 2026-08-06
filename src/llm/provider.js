@@ -55,7 +55,7 @@ export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model 
     }
   }
 
-  // 结构化输出助手：带 JSON Schema 提示 + 后置解析容错（§5.4 双向纵深防御）。
+  // 结构化输出助手：带 JSON Schema 提示 + 后置解析容错（双向纵深防御）。
   // 第一次直接请求（json_object 模式）；解析失败时把 schema 追加进 user 消息再试一次。
   chat.chatJson = async function chatJson(messages, schema, { temperature = 0.2, maxTokens = 4096 } = {}) {
     return chatJson(chat, messages, schema, { temperature, maxTokens });

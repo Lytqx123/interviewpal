@@ -1,4 +1,4 @@
-// 预分析 LLM Prompt（方案书 §5.4）。
+// 预分析 LLM Prompt：面试前一次 LLM 调用，输出七大层定制化面试计划。
 // 四要素：公司 + 岗位 + 简历 + 岗位要求；XML 标签分片；JSON Schema 输出约束。
 import { PREANALYSIS_SCHEMA, MIN_SUB_DIMENSIONS } from './schema.js';
 
@@ -8,7 +8,7 @@ export function buildPreAnalysisPrompt({ resumeVersion, company, position }) {
   const schemaText = JSON.stringify(PREANALYSIS_SCHEMA, null, 2);
 
   const system = `你是一名资深求职面试陪练系统的预分析引擎。
-面试开始前，你需要根据「简历版本 + 目标公司 + 目标岗位」生成一份覆盖七大深度层的定制化面试计划（方案书 §5.4）——它是面试官面试前读简历形成的判断与执行基线，不是通用题库。
+面试开始前，你需要根据「简历版本 + 目标公司 + 目标岗位」生成一份覆盖七大深度层的定制化面试计划——它是面试官面试前读简历形成的判断与执行基线，不是通用题库。
 七大层（必须全部输出）：
 ① jdAnalysis：JD 深度解析（岗位本质 / 级别判定 / 核心职责拆解 / 隐性要求 / 红线项 / 行业上下文 / 公司阶段 / 岗位痛点推断）
 ② candidateProfile：候选人画像深度分析（能力雷达六维 1-5 / 经历真实性预判 / 简历亮点 / 简历弱点 / 水分预警 / 技能深度分级 / 匹配度分析 / 职业轨迹 / 潜在翻车点）
@@ -20,7 +20,7 @@ export function buildPreAnalysisPrompt({ resumeVersion, company, position }) {
 要求：
 1. 全部基于输入材料推断，不编造简历里没有的事实；简历缺失的信息标注进风险预判
 2. 子维度总量不少于 ${MIN_SUB_DIMENSIONS} 个（含追问链与关键问题）
-3. 面试官在面试中"失忆"：本计划只含简历推导信息，不引用历次练习记录（方案书 §5.7）
+3. 面试官在面试中"失忆"：本计划只含简历推导信息，不引用历次练习记录（面试官失忆原则）
 4. 动态执行：计划是基线不是脚本，面试中按实时信号调整（卡壳降档 / 偏题拉回 / 意外深度延伸追问）
 5. 只输出 JSON，不要输出任何解释或 markdown`;
 

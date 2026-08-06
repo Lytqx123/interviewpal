@@ -22,7 +22,7 @@ function tmpStore(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return new ArchiveStore(dir);
 }
-describe('复盘教练 · 基线诊断与通关建议（方案书 §5.4 方向校准）', () => {
+describe('复盘教练 · 基线诊断与通关建议（方向校准）', () => {
   it('diagnoseBaseline：汇总各轮次状态 + 下一步建议', (t) => {
     const store = tmpStore(t);
     const company = store.createCompany({ name: 'X' });
@@ -53,7 +53,7 @@ describe('复盘教练 · 基线诊断与通关建议（方案书 §5.4 方向�
   });
 });
 
-describe('复盘教练 · 表达节奏分析（方案书 §4.1）', () => {
+describe('复盘教练 · 表达节奏分析', () => {
   it('analyzeRhythm：稳定节奏评 good、填充词多评 warning', () => {
     const turns = [
       { role: 'interviewer', content: 'Q1' }, { role: 'candidate', content: '首先我负责订单系统，其次用了缓存，最后性能提升。'.repeat(2) },
@@ -73,7 +73,7 @@ describe('复盘教练 · 表达节奏分析（方案书 §4.1）', () => {
   });
 });
 
-describe('复盘教练 · 高频题库（方案书 §4.1）', () => {
+describe('复盘教练 · 高频题库', () => {
   it('getQuestions：按岗位+轮次取题', () => {
     const qs = getQuestions('tech', 'round2');
     assert.ok(qs.length >= 1);
@@ -87,7 +87,7 @@ describe('复盘教练 · 高频题库（方案书 §4.1）', () => {
   });
 });
 
-describe('复盘教练 · 复盘报告导出（方案书 §4.1）', () => {
+describe('复盘教练 · 复盘报告导出', () => {
   it('exportReview：text 格式含复盘报告', () => {
     const record = {
       reviewId: 'rv1', companyId: 'c1', positionId: 'p1', roundKey: 'round1',
@@ -118,7 +118,7 @@ describe('复盘教练 · 复盘报告导出（方案书 §4.1）', () => {
   });
 });
 
-describe('复盘教练 · 双 Agent 分工（方案书 §5.8）', () => {
+describe('复盘教练 · 双 Agent 分工', () => {
   it('InterviewerAgent 失忆（无状态）、CoachAgent 全记忆（依赖 store）', async (t) => {
     const store = tmpStore(t);
     const company = store.createCompany({ name: 'X' });

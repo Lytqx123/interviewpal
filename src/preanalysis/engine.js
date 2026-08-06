@@ -1,4 +1,4 @@
-// 预分析主入口（方案书 §5.4）。
+// 预分析主入口：LLM 深度预分析生成七大层面试计划，作为面试官面试前读简历形成的判断与执行基线。
 // 流程：缓存命中 → LLM 生成（chatJson + schema 校验）→ 规则兜底。
 import { chatJson } from '../llm/provider.js';
 import { PREANALYSIS_SCHEMA, validatePlan, normalizePlan } from './schema.js';

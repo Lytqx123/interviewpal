@@ -1,4 +1,4 @@
-// 多轮次上下文准备（方案书 §5.5）。
+// 多轮次上下文准备（检索与提示词按轮次区分）。
 // 二面（业务面）核心要求：以"提交简历时填写的岗位职责 + 目标公司实际业务"为主要参考资料展开，
 // 并适当联网搜索设计前沿探索类题目，考察应对突发情况的压力与思维拓展力。
 //
@@ -23,7 +23,7 @@ export async function prepareRound2Context({ store, search, companyId, positionI
   const title = position?.title ?? '该岗位';
   const jobType = position?.jobType ?? 'tech';
 
-  // 公司实际业务：取 round2 检索缓存（enrichJd 默认 key 到 round2，§5.5）
+  // 公司实际业务：取二面检索缓存（enrichJd 默认 key 到 round2）
   const cache = store.getCache(companyId, 'round2');
   const companyBusiness = (cache?.entries ?? []).slice(0, 5).map((e) => ({
     name: e.entityName,
@@ -32,7 +32,7 @@ export async function prepareRound2Context({ store, search, companyId, positionI
   }));
 
   // 联网搜索前沿探索题：用岗位类型 + 岗位名 + 公司业务拼检索词，取最新趋势做压力题素材。
-  // 两条红线（§5.3）：只提交岗位/行业词，不提交个人信息。
+  // 两条红线：只提交岗位/行业词，不提交个人信息。
   const frontierTopics = await collectFrontierTopics({ search, jobType, title, companyBusiness, responsibilities });
 
   return { responsibilities, companyBusiness, frontierTopics, title, jobType };
@@ -64,7 +64,7 @@ function buildFrontierQuery({ jobType, title, responsibilities }) {
   return `${base} ${jobType} 行业 前沿 趋势 2026`;
 }
 
-// 触发二面联网补全进阶：补全时顺带把前沿话题写入 round2 缓存（§5.3 联网补全进阶）。
+// 触发二面联网补全进阶：补全时顺带把前沿话题写入二面缓存。
 // 与 prepareRound2Context 分离：补全是写缓存（副作用），准备是读缓存（纯读）。
 export async function enrichRound2Frontier({ store, search, jobProfile, companyId }) {
   return enrichJd({ store, search, jobProfile, companyId, roundKey: 'round2' });

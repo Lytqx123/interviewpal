@@ -9,7 +9,7 @@ export { handleApply, parseApplyCommand } from './apply.js';
 export async function handleResumeUpload({ store, llm, search, companyName = null, fileName = null, content }) {
   const resumeProfile = await parseResume(content, { llm });
 
-  // 每次上传都生成一个不可变简历版本（v1/v2...），投递时绑定的是版本不是"当前文件"（§5.2）。
+  // 每次上传都生成一个不可变简历版本（v1/v2...），投递时绑定的是版本不是"当前文件"。
   const version = store.createResumeVersion({
     rawText: content,
     profile: resumeProfile,
@@ -19,7 +19,7 @@ export async function handleResumeUpload({ store, llm, search, companyName = nul
   // 简历画像是全局的（一份简历投多家公司），先存档
   store.saveResumeProfile({ ...resumeProfile, activeVersionId: version.versionId });
 
-  // 用户带了公司名就顺便补全（简历面检索重点：公司/技术，§5.5 round1）
+  // 用户带了公司名就顺便补全（简历面检索重点：公司/技术）
   let companyId = null;
   let enrichment = null;
   if (companyName) {
@@ -35,7 +35,7 @@ export async function handleJdPaste({ store, llm, search, companyName = null, jd
   const jobProfile = await parseJd(jdText, { llm });
   const company = ensureCompany(store, companyName || jobProfile.companyName || '未命名公司');
 
-  // 岗位画像：职责/要求/关键词直接写进 position.profile（§5.3 双画像之一）
+  // 岗位画像：职责/要求/关键词直接写进 position.profile（双画像之一）
   const position = store.createPosition(company.companyId, {
     title: jobProfile.title,
     jdText,
@@ -49,7 +49,7 @@ export async function handleJdPaste({ store, llm, search, companyName = null, jd
     },
   });
 
-  // JD 补全重点属于二面业务面（§5.5 round2：真实 JD 职责/业务方向）
+  // JD 补全重点属于二面业务面（真实 JD 职责/业务方向）
   const enrichment = await enrichJd({
     store,
     search,

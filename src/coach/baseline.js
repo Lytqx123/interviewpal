@@ -1,4 +1,4 @@
-// P1：基线诊断与通关建议（方案书 §5.4 方向校准）。
+// P1：基线诊断与通关建议（方向校准：首次练习前输出各轮能力基线）。
 // 联网调研依据：三层复盘法第三层"行动层"——基于跨场次趋势给通关建议；
 // 学习闭环 Iterate 环节——达标后才进入下一轮，避免带伤上场。
 import { ROUND_KEYS, SCORE_DIMENSIONS } from '../archive/constants.js';
@@ -56,7 +56,7 @@ export function passRecommendation({ store, companyId, positionId, roundKey }) {
     reason: passing
       ? `六维均分 ${avg.toFixed(1)}，无短板维度，建议进入${nextRound ? roundLabel(nextRound) : '下一阶段'}`
       : `六维均分 ${avg.toFixed(1)}${weakDims.length ? `，短板维度：${weakDims.join('、')}` : ''}，建议针对短板继续练习`,
-    action: passing ? (nextRound ? `开始${roundLabel(nextRound)}` : '准备终面通过') : `重练${roundLabel(roundKey)}`,
+    action: passing ? (nextRound ? `开始${roundLabel(nextRound)}` : '全部轮次达标') : `重练${roundLabel(roundKey)}`,
     nextRound,
   };
 }

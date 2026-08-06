@@ -1,5 +1,5 @@
 // 复盘引擎：评估面试表现、对比历史、生成报告。
-// 教练"全记忆"（方案书 §4.2）：读取历史复盘记录，对比上次表现。
+// 教练"全记忆"：读取历史复盘记录，对比上次表现。
 // LLM 优先，规则兜底（与 parser/interviewer 一致的双路径模式）。
 import { parseJsonFromText } from '../llm/provider.js';
 import { buildReviewPrompt } from './prompts.js';

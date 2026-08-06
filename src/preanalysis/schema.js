@@ -1,5 +1,5 @@
-// 预分析七大层 JSON Schema（方案书 §5.4）。
-// 层定义（与方案书一一对应）：
+// 预分析七大层 JSON Schema：面试官面试前读简历形成的判断与执行基线。
+// 层定义：
 //   ① jdAnalysis          JD 深度解析
 //   ② candidateProfile    候选人画像深度分析
 //   ③ interviewerPersona  每轮面试官深度人设（round1/round2/round3）

@@ -17,7 +17,7 @@ export async function parseResume(text, { llm } = {}) {
         return normalizeResume(data, text);
       }
     } catch (err) {
-      // LLM 挂了不阻塞上传，落回规则解析（§5.1 规则兜底）
+      // LLM 挂了不阻塞上传，落回规则解析（规则兜底）
       console.warn('[resume] llm parse failed, fallback to rules:', err.message);
     }
   }

@@ -21,7 +21,7 @@ function tmpStore(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return new ArchiveStore(dir);
 }
-describe('面试官 · 轮次上下文准备（方案书 §5.5：检索与提示词按轮次区分）', () => {
+describe('面试官 · 轮次上下文准备（检索与提示词按轮次区分）', () => {
   it('prepareRound2Context：取岗位职责 + 公司业务缓存 + 联网前沿话题', async (t) => {
     const store = tmpStore(t);
     const company = store.createCompany({ name: '星辰科技' });

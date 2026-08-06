@@ -34,7 +34,7 @@ ${rubricText()}
 ${dialogue}
 
 【期望考察方向】
-${expectedDirections.join('、') || '开场破冰、岗位类型驱动追问'}
+${expectedDirections.join('、') || '开场破冰、围绕岗位职责与简历经历追问'}
 
 【历史表现】
 ${lastScoresText}
