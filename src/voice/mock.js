@@ -74,7 +74,7 @@ export function makeBeepPcm(seconds = 0.4, freq = 440) {
  * 启动一个本地 Mock 服务端。
  * onConnection({ ws, headers }) 可用于测试时断言上游收到的鉴权 header。
  */
-export async function createMockDoubaoServer({ onConnection } = {}) {
+export async function createMockDoubaoServer({ onConnection, onStartSession } = {}) {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   await new Promise((resolve, reject) => {
     wss.once('listening', resolve);
@@ -95,7 +95,20 @@ export async function createMockDoubaoServer({ onConnection } = {}) {
       if (frame.event === EV_START_CONNECTION) {
         ws.send(buildServerFrame({ event: EV_CONNECTION_STARTED, payloadJson: {} }));
       } else if (frame.event === EV_START_SESSION) {
-        ws.send(buildServerFrame({ event: EV_SESSION_STARTED, sessionId: sid, payloadJson: {} }));
+        const dialog = frame.payloadJson?.dialog ?? {};
+        const echo = {
+          botName: dialog.bot_name ?? '',
+          systemRole: dialog.system_role ?? '',
+          speakingStyle: dialog.speaking_style ?? '',
+        };
+        if (onStartSession) onStartSession({ sessionId: sid, payloadJson: frame.payloadJson, echo });
+        ws.send(
+          buildServerFrame({
+            event: EV_SESSION_STARTED,
+            sessionId: sid,
+            payloadJson: { echo },
+          }),
+        );
       } else if (frame.event === EV_FINISH_SESSION) {
         ws.send(buildServerFrame({ event: EV_SESSION_FINISHED, sessionId: sid, payloadJson: {} }));
       } else if (frame.event === EV_FINISH_CONNECTION) {
@@ -110,7 +123,7 @@ export async function createMockDoubaoServer({ onConnection } = {}) {
             event: EV_ASR,
             sessionId: sid,
             payloadJson: {
-              results: [{ text: '（Mock）我听到你说话了', is_interim: false }],
+              results: [{ text: frame.payloadJson?.dialog?.mock_asr_text || '（Mock）我听到你说话了', is_interim: false }],
               extra: { endpoint: true },
             },
           }),
@@ -120,7 +133,7 @@ export async function createMockDoubaoServer({ onConnection } = {}) {
             event: EV_LLM,
             sessionId: sid,
             payloadJson: {
-              content: 'Mock 模式：这是一段模拟面试官回复，用来验证双向音频链路。',
+              content: frame.payloadJson?.dialog?.mock_llm_text || 'Mock 模式：这是一段模拟面试官回复，用来验证双向音频链路。',
             },
           }),
         );

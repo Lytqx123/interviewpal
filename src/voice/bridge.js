@@ -16,6 +16,15 @@ import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createMockDoubaoServer } from './mock.js';
+import {
+  buildControlFrame,
+  parseFrame,
+  EV_START_SESSION,
+  EV_FINISH_SESSION,
+  EV_ASR,
+  EV_LLM,
+  EV_SESSION_FINISHED,
+} from './protocol.js';
 
 const DEFAULT_TARGET = 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue';
 const DEFAULT_APP_KEY = 'PlgvMymc7f3tQnJ6'; // 官方固定值
@@ -131,7 +140,74 @@ function buildAuthHeaders(cfg, auth) {
   return headers;
 }
 
-function serveStatic(req, res, cfg) {
+async function handleRequest(req, res, cfg, coordination) {
+  const url = new URL(req.url, 'http://localhost');
+  const sendJson = (code, obj) => {
+    res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(obj));
+  };
+
+  if (req.method === 'POST' && url.pathname === '/voice/start-session') {
+    if (!coordination) {
+      sendJson(501, { error: 'coordination not enabled' });
+      return;
+    }
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    let input = {};
+    try {
+      input = JSON.parse(body || '{}');
+    } catch {
+      sendJson(400, { error: 'invalid json body' });
+      return;
+    }
+    try {
+      const result = await coordination.start({
+        companyId: input.companyId,
+        positionId: input.positionId,
+        roundKey: input.roundKey ?? 'round1',
+      });
+      sendJson(200, result);
+    } catch (err) {
+      sendJson(400, { error: err.message });
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname.startsWith('/voice/session/')) {
+    if (!coordination) {
+      sendJson(501, { error: 'coordination not enabled' });
+      return;
+    }
+    const sessionKey = decodeURIComponent(url.pathname.slice('/voice/session/'.length));
+    const info = coordination.getSessionInfo(sessionKey);
+    if (!info) {
+      sendJson(404, { error: 'session not found' });
+      return;
+    }
+    sendJson(200, info);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname.startsWith('/voice/review/')) {
+    if (!coordination) {
+      sendJson(501, { error: 'coordination not enabled' });
+      return;
+    }
+    const sessionKey = decodeURIComponent(url.pathname.slice('/voice/review/'.length));
+    const report = coordination.getReport(sessionKey);
+    if (!report) {
+      sendJson(404, { error: 'review not ready' });
+      return;
+    }
+    sendJson(200, report);
+    return;
+  }
+
+  serveStatic(req, res, cfg, coordination);
+}
+
+function serveStatic(req, res, cfg, coordination) {
   if (!isLocalOrigin(req.headers.origin)) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('forbidden');
@@ -155,6 +231,7 @@ function serveStatic(req, res, cfg) {
           speakingStyle: cfg.speakingStyle,
           model: cfg.model,
         },
+        coordination: Boolean(coordination),
       }),
     );
     return;
@@ -259,6 +336,33 @@ function handleUpgrade(req, socket, head, cfg, wss, ctx) {
     upstream.on('message', (data) => {
       upstreamFrames++;
       if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data);
+      if (ctx.coordination && data.length) {
+        parseFrame(data)
+          .then((frame) => {
+            if (!frame?.sessionId) return;
+            if (frame.event === EV_ASR) {
+              const results = frame.payloadJson?.results ?? [];
+              const text = Array.isArray(results)
+                ? results.map((r) => (r && r.text) || '').join('')
+                : '';
+              if (text) {
+                Promise.resolve(ctx.coordination.handleAsr(frame.sessionId, text)).catch((e) =>
+                  log.error('[voice] asr handling failed:', e.message),
+                );
+              }
+            } else if (frame.event === EV_LLM) {
+              const content = frame.payloadJson?.content;
+              if (typeof content === 'string' && content) {
+                ctx.coordination.collectChat(frame.sessionId, content);
+              }
+            } else if (frame.event === EV_SESSION_FINISHED) {
+              ctx.coordination
+                .finish(frame.sessionId)
+                .catch((e) => log.error('[voice] review failed:', e.message));
+            }
+          })
+          .catch((e) => log.error('[voice] upstream frame parse failed:', e.message));
+      }
     });
     upstream.on('close', () => {
       try {
@@ -274,12 +378,45 @@ function handleUpgrade(req, socket, head, cfg, wss, ctx) {
       cleanup();
     });
 
-    clientWs.on('message', (data) => {
+    clientWs.on('message', async (data) => {
       clientFrames++;
+      let out = data;
+      let finishKey = null;
+      if (ctx.coordination && data.length) {
+        try {
+          const frame = await parseFrame(data);
+          if (frame?.event === EV_START_SESSION && frame.payloadJson) {
+            const config = ctx.coordination.getConfig(frame.sessionId);
+            if (config) {
+              const payload = { ...frame.payloadJson };
+              payload.dialog = {
+                ...(payload.dialog ?? {}),
+                bot_name: config.botName,
+                system_role: config.systemRole,
+                speaking_style: config.speakingStyle,
+                extra: {
+                  ...(payload.dialog?.extra ?? {}),
+                  model: config.model,
+                },
+              };
+              out = buildControlFrame(frame.event, { sessionId: frame.sessionId, payload });
+            }
+          } else if (frame?.event === EV_FINISH_SESSION && frame.sessionId) {
+            finishKey = frame.sessionId;
+          }
+        } catch (e) {
+          log.error('[voice] client frame parse failed:', e.message);
+        }
+      }
       if (upstreamOpen && upstream.readyState === WebSocket.OPEN) {
-        upstream.send(data);
+        upstream.send(out);
       } else {
-        pending.push(data);
+        pending.push(out);
+      }
+      if (finishKey && ctx.coordination) {
+        ctx.coordination
+          .finish(finishKey)
+          .catch((e) => log.error('[voice] review failed:', e.message));
       }
     });
     clientWs.on('close', cleanup);
@@ -298,6 +435,7 @@ export async function startVoiceServer({
   port = 8780,
   host = '127.0.0.1',
   config,
+  coordination = null,
   log = console,
 } = {}) {
   const cfg = config ?? readVoiceConfig();
@@ -312,12 +450,13 @@ export async function startVoiceServer({
   }
   const getMockTarget = () => `ws://127.0.0.1:${mockUpstream.port}`;
 
-  const server = http.createServer((req, res) => serveStatic(req, res, cfg));
+  const server = http.createServer((req, res) => handleRequest(req, res, cfg, coordination));
   const wss = new WebSocketServer({ noServer: true });
   const upstreams = new Set();
   server.on('upgrade', (req, socket, head) =>
     handleUpgrade(req, socket, head, cfg, wss, {
       getMockTarget,
+      coordination,
       log: logger,
       trackUpstream: (ws) => {
         upstreams.add(ws);

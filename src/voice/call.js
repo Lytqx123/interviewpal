@@ -32,6 +32,12 @@ const state = {
   startedAt: 0,
   msgQueue: Promise.resolve(),
   durationTimer: null,
+  sessionKey: null,
+  sessionConfig: null,
+  panelTimer: null,
+  roundKey: 'round1',
+  companyId: '',
+  positionId: '',
 };
 
 function setStatus(cls, msg) {
@@ -100,17 +106,20 @@ function sendControl(event, { sessionId = state.sessionId, payload = {} } = {}) 
 }
 
 function buildStartSessionPayload() {
-  const s = (state.status && state.status.session) || {};
+  const c = state.sessionConfig || ((state.status && state.status.session) || {});
+  const mockAsrText = $('mockAsrText').value.trim();
+  const dialog = {
+    bot_name: c.botName || '面试官',
+    system_role: c.systemRole || '',
+    speaking_style: c.speakingStyle || '',
+    extra: { strict_audit: false, model: c.model || '1.2.1.1' },
+  };
+  if (mockAsrText) dialog.mock_asr_text = mockAsrText;
   return {
     tts: {
       audio_config: { channel: 1, format: 'pcm_s16le', sample_rate: 24000 },
     },
-    dialog: {
-      bot_name: s.botName || '面试官',
-      system_role: s.systemRole || '',
-      speaking_style: s.speakingStyle || '',
-      extra: { strict_audit: false, model: s.model || '1.2.1.1' },
-    },
+    dialog,
   };
 }
 
@@ -140,6 +149,8 @@ async function handleFrame(frame) {
     case EV_SESSION_STARTED:
       append('sys', '会话已建立(150)，开启麦克风');
       state.ready = true;
+      updatePanel();
+      startPanelPolling();
       setStatus('ready', '通话中 · 请说话');
       try {
         await startMic();
@@ -172,6 +183,8 @@ async function handleFrame(frame) {
     case EV_STREAM_FINISHED:
       append('sys', `会话结束事件(${frame.event})`);
       state.ready = false;
+      updatePanel();
+      stopPanelPolling();
       break;
     default:
       break;
@@ -269,6 +282,9 @@ function resetState() {
   state.recvFrames = 0;
   state.startedAt = 0;
   state.msgQueue = Promise.resolve();
+  state.sessionKey = null;
+  state.sessionConfig = null;
+  stopPanelPolling();
   updateMetrics();
 }
 
@@ -290,7 +306,35 @@ async function connect() {
     q.set('accessKey', accessKey);
   }
 
-  state.sessionId = crypto.randomUUID();
+  if (state.status.coordination) {
+    const companyId = $('companyId').value.trim();
+    const positionId = $('positionId').value.trim();
+    const roundKey = $('roundKey').value;
+    if (!companyId || !positionId) {
+      setStatus('error', '请填写公司 ID 与岗位 ID');
+      return;
+    }
+    append('sys', '创建语音面试会话（预分析 + 面试官 session）…');
+    const startRes = await fetch('/voice/start-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId, positionId, roundKey }),
+    });
+    const startData = await startRes.json();
+    if (!startRes.ok) {
+      setStatus('error', '创建会话失败：' + (startData.error || startRes.status));
+      return;
+    }
+    state.sessionKey = startData.sessionKey;
+    state.sessionConfig = startData.config;
+    state.roundKey = roundKey;
+    state.companyId = companyId;
+    state.positionId = positionId;
+  } else {
+    state.sessionKey = null;
+    state.sessionConfig = null;
+  }
+  state.sessionId = state.sessionKey || crypto.randomUUID();
   state.startedAt = Date.now();
   state.durationTimer = setInterval(updateMetrics, 1000);
   setStatus('connecting', '连接中…');
@@ -328,6 +372,8 @@ async function connect() {
     stopMic();
     stopPlayback();
     setStatus('idle', '已断开');
+    stopPanelPolling();
+    fetchReview();
     $('connect').disabled = false;
     $('hangup').disabled = true;
   };
@@ -354,6 +400,51 @@ function hangup(reason) {
   $('hangup').disabled = true;
 }
 
+
+// ============ 会话状态面板 / 复盘拉取（配合语音会话编排层） ============
+function updatePanel() {
+  if (!state.sessionKey) return;
+  fetch(`/voice/session/${encodeURIComponent(state.sessionKey)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((info) => {
+      if (!info) return;
+      const s = info.summary || {};
+      $('panelRound').textContent = { round1: '一面', round2: '二面', round3: '三面' }[info.roundKey] || info.roundKey;
+      $('panelAsked').textContent = String(s.depth || 0);
+      $('panelLeft').textContent = String(Math.max(0, (s.maxDepth || 0) - (s.depth || 0)));
+      const last = s.signals && s.signals.length ? s.signals[s.signals.length - 1] : null;
+      const sig = last ? last.signals : null;
+      const el = $('panelSignal');
+      el.textContent = sig ? `${sig.difficulty}/${sig.direction}/${sig.fluency}` : '-';
+      el.className = 'badge' + (sig && sig.direction === 'off_topic' ? ' signal-bad' : sig && sig.fluency === 'poor' ? ' signal-warn' : '');
+    })
+    .catch(() => {});
+}
+
+function startPanelPolling() {
+  stopPanelPolling();
+  state.panelTimer = setInterval(updatePanel, 1500);
+}
+
+function stopPanelPolling() {
+  if (state.panelTimer) {
+    clearInterval(state.panelTimer);
+    state.panelTimer = null;
+  }
+}
+
+function fetchReview() {
+  if (!state.sessionKey) return;
+  fetch(`/voice/review/${encodeURIComponent(state.sessionKey)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      if (!data || !data.review || !data.review.report) return;
+      const card = $('reviewCard');
+      card.hidden = false;
+      $('review').textContent = data.review.report;
+    })
+    .catch(() => {});
+}
 // ============ 初始化 ============
 async function init() {
   try {

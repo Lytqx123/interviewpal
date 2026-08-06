@@ -287,6 +287,7 @@ export function getSessionSummary(session) {
     baselineCount: session.baselinePlan?.items?.length ?? 0,
     focusAreas: session.turns.filter((t) => t.focusArea).map((t) => t.focusArea),
     signalCount: session.signals.length,
+    signals: session.signals,
     adjustmentCount: session.adjustments.length,
     executionTrace: session.executionTrace,
   };

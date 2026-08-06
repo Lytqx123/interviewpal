@@ -43,6 +43,22 @@
   <div class="hint">凭据仅存在本机 localStorage，仅发给本地代理，代理负责注入鉴权 header。</div>
 </div>
 
+<div class="card" id="sessionCard">
+  <label>公司 ID（档案库 companyId）</label>
+  <input id="companyId" placeholder="c_1" autocomplete="off">
+  <label>岗位 ID（档案库 positionId）</label>
+  <input id="positionId" placeholder="p_1" autocomplete="off">
+  <label>面试轮次</label>
+  <select id="roundKey">
+    <option value="round1" selected>一面（简历面）</option>
+    <option value="round2">二面（业务面）</option>
+    <option value="round3">三面（总监交叉面）</option>
+  </select>
+  <label>Mock ASR 文本（可选，仅 mock 模式调试用）</label>
+  <input id="mockAsrText" placeholder="（留空则用默认模拟文本）" autocomplete="off">
+  <div class="hint">开启语音面试时会先创建预分析会话，System Prompt 按公司/岗位/轮次动态注入。</div>
+</div>
+
 <div class="row">
   <button id="connect">开始通话</button>
   <button id="hangup" class="danger" disabled>挂断</button>
@@ -57,8 +73,22 @@
   <span>麦克风音量 <meter id="level" min="0" max="1" value="0"></meter></span>
 </div>
 
+<div class="card" id="panelCard">
+  <div class="metrics">
+    <span>当前轮次 <b id="panelRound">-</b></span>
+    <span>已问 <b id="panelAsked">0</b></span>
+    <span>剩余 <b id="panelLeft">-</b></span>
+    <span>信号 <b id="panelSignal" class="badge">-</b></span>
+  </div>
+</div>
+
 <div id="log" class="hint"></div>
 <div class="hint">接通后对着麦克风说话；AI 说话时插话会触发打断（全双工）。建议戴耳机避免回声。Mock 模式下会返回提示音验证双向链路。</div>
+
+<div class="card" id="reviewCard" hidden>
+  <h2 style="font-size: 1.1em; margin: 0 0 8px;">复盘报告（通话结束自动生成）</h2>
+  <pre id="review" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.6; margin: 0;"></pre>
+</div>
 
 <script type="module" src="/voice/call.js"></script>
 </body>

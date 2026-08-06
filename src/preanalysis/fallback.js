@@ -104,7 +104,10 @@ export function buildFallbackPlan({ resumeVersion, company, position }) {
       { statement: '「负责/主导」vs「参与/协助」措辞', howToVerify: '追问个人贡献边界与具体动作' },
       { statement: '量化数字是否真实可归因', howToVerify: '追问统计口径与提升来源' },
     ],
-    skillDepth: skillNames.slice(0, 4).map((s) => ({ skill: s, depth: '能干' })),
+    skillDepth: [
+      ...skillNames.slice(0, 4).map((s) => ({ skill: s, depth: '能干' })),
+      ...(skillNames.length < 2 ? [{ skill: '核心技能（待面试验证）', depth: '了解' }] : []),
+    ],
     fitAnalysis: {
       strongMatches: pick(skillNames.filter((s) => requirements.some((r) => r.includes(s))), 2).length
         ? pick(skillNames.filter((s) => requirements.some((r) => r.includes(s))), 2)
