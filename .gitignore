@@ -10,4 +10,6 @@ node_modules/
 
 # 语音链路本地凭据：只留 example 模板入库（§4.6）
 .env.voice.local
+.env.local
+.env.*.local
 .env
