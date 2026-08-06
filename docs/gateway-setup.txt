@@ -1,0 +1,64 @@
+InterviewPal · OpenClaw Gateway 接入配置清单（P5）
+====================================================
+
+目标
+----
+把 InterviewPal 的命令脑（上传简历 / 粘贴 JD / 投递 / 开始面试 /
+复盘报告）挂到 OpenClaw Gateway（v2026.6.11，本机容器端口 18789），
+移动 App 通过聊天 + Talk 模式使用全部能力。
+
+前置条件（人工操作，不计入代码阶段工时）
+----------------------------------------
+1. 启动 OpenClaw Gateway：
+     docker run -d --name openclaw -p 18789:18789 ghcr.io/openclaw/openclaw:2026.6.11
+   或使用官方 install.ps1 / install.sh 原生安装。
+2. 打开 Control UI：http://localhost:18789
+3. 配对移动设备：
+     Control UI -> 节点/Devices -> 配对移动设备
+     手机 App 扫码或手输设置码完成配对。
+4. 获取后端接入凭据（operator token / 共享密码）：
+     Control UI -> 设置，或 CLI：openclaw devices list / openclaw config
+   （本机回环后端客户端可用 gateway-client 身份 + 共享 token 直连。）
+
+安装豆包实时语音插件（Talk 模式联通）
+-------------------------------------
+1. ClawHub 安装 openclaw-doubao-realtime 插件（provider-only，注册
+   doubao-realtime 实时语音 provider）。
+2. 在 openclaw.json 配置 Talk：
+     talk.realtime.provider = "doubao-realtime"
+     talk.realtime.transport = "gateway-relay"
+     talk.realtime.mode     = "realtime"
+3. 火山引擎开通豆包端到端实时语音，取得 APP ID / Access Token，
+   填入插件配置或环境变量。
+
+InterviewPal 侧配置（.env.local，不入库）
+------------------------------------------
+OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789/ws
+OPENCLAW_GATEWAY_TOKEN=<配对后拿到的 operator token>
+OPENCLAW_AGENT_ID=main
+GATEWAY_MOCK=0
+GATEWAY_AUTO_RECONNECT=1
+GATEWAY_DATA_DIR=data
+
+启动
+----
+npm run gateway
+
+- 配置了有效 token：进入真实模式，订阅 chat/agent 事件，命令脑回写会话；
+- 未配置 token / 未配对 / token 失效：自动降级为 mock 模式（可完整演示）；
+- 断网时消息进入 data/gateway-outbox.json 排队（最多 50 条、48 小时有效），
+  重连后按顺序补发；最近会话与复盘报告写入 data/gateway-cache.json。
+
+网络兜底（方案书 §4.5）
+----------------------
+- 局域网直连：App 填主机局域网 IP（默认 18789）；
+- Tailscale：App 填 Tailscale MagicDNS 名（wss:// 或 http:// 视配置）；
+- 云端：Gateway 部署到云服务器后，App 填公网地址。
+
+验收对照
+--------
+1. 聊天命令路由正确（上传 / JD / 投递 / 开始面试 / 复盘报告）；
+2. App Talk 与豆包实时语音联通（延迟、打断、音质）；
+3. 无 key 时 mock 模式可演示（npm run gateway 无 token 即降级）；
+4. 数据本地优先，公司信息按档案库隔离不串味；
+5. npm test 全量通过。

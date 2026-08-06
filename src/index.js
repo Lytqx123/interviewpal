@@ -29,6 +29,17 @@ export { handleResumeUpload, handleJdPaste, handleApply } from './onboarding/ind
 export { startVoiceServer, readVoiceConfig, loadEnvFile } from './voice/bridge.js';
 export { createMockDoubaoServer, buildServerFrame, makeBeepPcm } from './voice/mock.js';
 export {
+  OpenClawGatewayClient,
+  GatewayError,
+  startGatewayBootstrap,
+  readGatewayConfig,
+  createCommandRouter,
+  detectIntent,
+  createDualAgentOrchestrator,
+  createOfflineOutbox,
+  createOfflineCache,
+} from './gateway/index.js';
+export {
   buildControlFrame,
   buildAudioFrame,
   buildFrame,
