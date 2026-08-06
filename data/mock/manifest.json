@@ -1,0 +1,57 @@
+{
+  "storeDir": "data/demo",
+  "resumes": [
+    { "id": "frontend", "title": "前端工程师", "file": "resumes/resume-frontend.txt" },
+    { "id": "backend", "title": "后端工程师", "file": "resumes/resume-backend.txt" },
+    { "id": "product", "title": "产品经理", "file": "resumes/resume-product.txt" }
+  ],
+  "companies": [
+    {
+      "name": "星辰科技",
+      "positions": [
+        { "title": "前端工程师", "file": "jds/jd-xingchen-frontend.txt" },
+        { "title": "后端工程师", "file": "jds/jd-xingchen-backend.txt" },
+        { "title": "产品经理", "file": "jds/jd-xingchen-product.txt" }
+      ]
+    },
+    {
+      "name": "蓝海网络",
+      "positions": [
+        { "title": "前端工程师", "file": "jds/jd-lanhai-frontend.txt" },
+        { "title": "后端工程师", "file": "jds/jd-lanhai-backend.txt" },
+        { "title": "产品经理", "file": "jds/jd-lanhai-product.txt" }
+      ]
+    },
+    {
+      "name": "云帆数据",
+      "positions": [
+        { "title": "前端工程师", "file": "jds/jd-yunfan-frontend.txt" },
+        { "title": "后端工程师", "file": "jds/jd-yunfan-backend.txt" },
+        { "title": "产品经理", "file": "jds/jd-yunfan-product.txt" }
+      ]
+    }
+  ],
+  "applications": [
+    { "company": "星辰科技", "position": "前端工程师", "resumeId": "frontend" },
+    { "company": "蓝海网络", "position": "后端工程师", "resumeId": "backend" },
+    { "company": "云帆数据", "position": "产品经理", "resumeId": "product" }
+  ],
+  "demo": {
+    "company": "星辰科技",
+    "position": "前端工程师",
+    "resumeId": "frontend",
+    "answersRound1": [
+      "好的，我叫李一凡，有 3 年前端经验，之前在星辰科技做数据可视化大屏，主要负责组件库和性能优化。",
+      "可视化大屏项目里我主要负责组件库设计，因为要支撑十几个业务方复用，所以设计了一套按需加载和主题定制的方案，对比过直接引用第三方库的方案，维护成本太高，最后选了自研，首屏从 5 秒优化到 1.8 秒，QPS 也有提升。",
+      "这个技术原理我不太清楚，没深入研究过，感觉就是那么用的，嗯……可能跟浏览器渲染机制有关吧。",
+      "换个话题说吧，这块我确实没做过。",
+      "关于微前端，我们对比过 qiankun 和 single-spa，最后选 qiankun 是因为沙箱隔离成熟、社区活跃，还解决了样式隔离和公共依赖加载的问题，边界上主要关注子应用间的通信协议和灰度发布策略。"
+    ],
+    "answersRound2": [
+      "我理解这个岗位的核心价值是把数据转化成业务决策，所以会先梳理用户场景和指标体系。",
+      "结合我们公司数据产品，我觉得核心是让用户快速理解数据，所以会先做指标体系和可视化规范，再通过埋点分析用户使用路径，用 A/B 测试验证改版效果。",
+      "关于跨部门推动，我一般先对齐目标和里程碑，每周同步风险，遇到资源冲突会拉上双方负责人一起定优先级，这个方案在之前的会员项目中验证过。",
+      "如果上线后数据不达预期，我会先拆指标看是渠道问题还是产品问题，再决定是回滚还是快速迭代，同时准备复盘文档同步给团队。"
+    ]
+  }
+}

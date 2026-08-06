@@ -1,0 +1,4 @@
+王强，5 年 Java 后端工程师经验。
+在蓝海网络任职，负责订单系统设计与高并发改造，熟悉 Redis、Kafka、MySQL。
+主导设计分布式事务方案，QPS 从 500 提升到 2000，接口耗时下降 60%。
+熟悉微服务架构和 Docker、Kubernetes，掌握 Java、Spring Boot。

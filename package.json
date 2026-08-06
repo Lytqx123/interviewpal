@@ -10,7 +10,9 @@
   "scripts": {
     "test": "node --test",
     "voice": "node src/voice/bridge.js",
-    "gateway": "node src/gateway/bootstrap.js"
+    "gateway": "node src/gateway/bootstrap.js",
+    "seed": "node scripts/seed.mjs",
+    "demo": "node scripts/e2e-demo.mjs"
   },
   "dependencies": {
     "ws": "^8.21.2"
