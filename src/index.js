@@ -7,19 +7,24 @@ export { parseJd } from './parser/jd.js';
 export { detectJobType, parseResumeByRules, parseJdByRules } from './parser/rules.js';
 export { createSearchProvider } from './search/provider.js';
 export { enrichResume, enrichJd, collectResumeEntities, collectJdEntities } from './enrich/enrich.js';
-export { generatePlan } from './strategy/preAnalysis.js';
+export { generatePlan } from './preanalysis/engine.js';
 export {
-  STRATEGY_SCHEMA,
-  STRATEGY_SCHEMA_VERSION,
+  PREANALYSIS_SCHEMA,
+  PREANALYSIS_SCHEMA_VERSION,
   MIN_SUB_DIMENSIONS,
   SUB_DIMENSION_TOLERANCE,
   validatePlan,
   countSubDimensions,
   normalizePlan,
-} from './strategy/schema.js';
-export { buildPreAnalysisPrompt } from './strategy/prompts.js';
-export { buildRulesPlan } from './strategy/rules.js';
-export { strategyCacheKey } from './strategy/cache.js';
+} from './preanalysis/schema.js';
+export { buildPreAnalysisPrompt } from './preanalysis/prompts.js';
+export { buildFallbackPlan } from './preanalysis/fallback.js';
+export { strategyCacheKey } from './preanalysis/cache.js';
+export { createSession, startInterview, askFollowup, nextQuestion, buildBaselinePlan, closeInterview, getSessionSummary, ingestSignal } from './interviewer/index.js';
+export { openingByRules, followupByRules, closingByRules, nextQuestionByRules } from './interviewer/rules.js';
+export { prepareRound2Context, enrichRound2Frontier, roundMetaFromPlan } from './interviewer/rounds.js';
+export { reviewInterview, compareWithLast, generateReport, formatReport, buildReviewPrompt, reviewWithMemory } from './coach/index.js';
+export { diagnoseBaseline, passRecommendation, analyzeRhythm, getQuestions, recommendByWeakness, exportReview, createInterviewerAgent, createCoachAgent } from './coach/index.js';
 export { handleResumeUpload, handleJdPaste, handleApply } from './onboarding/index.js';
 export { startVoiceServer, readVoiceConfig, loadEnvFile } from './voice/bridge.js';
 export { createMockDoubaoServer, buildServerFrame, makeBeepPcm } from './voice/mock.js';

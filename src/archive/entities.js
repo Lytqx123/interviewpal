@@ -24,7 +24,7 @@ export function emptyScores() {
 }
 
 // 复盘记录的最小骨架。saveReview 之前先拿它兜底，字段随教练模块扩展。
-// 阶段七扩展：questions（跨场次重复题对比用）、perQuestionReview/scoreEvidence（阶段六复盘产物）。
+// 记忆闭环扩展（方案书 §5.7）：questions（跨场次重复题对比用）、perQuestionReview/scoreEvidence（复盘产物 §5.9）。
 export function newReviewRecord({ companyId, positionId, roundKey, sessionId, createdAt = new Date().toISOString() }) {
   return {
     reviewId: newId('rv'),

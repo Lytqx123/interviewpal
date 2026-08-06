@@ -1,4 +1,4 @@
-// P1：基线诊断与通关建议（阶段八可选）。
+// P1：基线诊断与通关建议（方案书 §5.4 方向校准）。
 // 联网调研依据：三层复盘法第三层"行动层"——基于跨场次趋势给通关建议；
 // 学习闭环 Iterate 环节——达标后才进入下一轮，避免带伤上场。
 import { ROUND_KEYS, SCORE_DIMENSIONS } from '../archive/constants.js';

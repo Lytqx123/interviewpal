@@ -1,4 +1,4 @@
-// 阶段八：多轮次上下文准备。
+// 多轮次上下文准备（方案书 §5.5）。
 // 二面（业务面）核心要求：以"提交简历时填写的岗位职责 + 目标公司实际业务"为主要参考资料展开，
 // 并适当联网搜索设计前沿探索类题目，考察应对突发情况的压力与思维拓展力。
 //
@@ -6,10 +6,13 @@
 // 组装成 roundContext 供面试官策略池引用。无 search/无缓存时优雅降级（规则兜底）。
 import { enrichJd } from '../enrich/enrich.js';
 
-// R2：从预分析作战地图 L7 读取轮次差异化策略（二面业务面 / 三面终面），
-// 取代硬编码；strategyPlan 缺失时由 rules.js 的职位类型策略池兜底。
+// 从预分析作战地图⑦层读取轮次差异化策略（二面业务面 / 三面总监交叉面），
+// 取代硬编码；预分析缺失时由 rules.js 的职位类型策略池兜底。
 export function roundMetaFromPlan(strategyPlan, roundKey) {
-  return strategyPlan?.layers?.roundPositioning?.[roundKey] ?? null;
+  return {
+    rhythm: strategyPlan?.layers?.rhythmDesign?.[roundKey] ?? null,
+    strategy: strategyPlan?.layers?.roundStrategy?.[roundKey] ?? null,
+  };
 }
 
 // 准备二面（round2）上下文：岗位职责 + 公司业务 + 前沿探索题。

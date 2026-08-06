@@ -1,13 +1,13 @@
-// 预分析主入口（方案书 §5.4 / 重构计划 R1）。
+// 预分析主入口（方案书 §5.4）。
 // 流程：缓存命中 → LLM 生成（chatJson + schema 校验）→ 规则兜底。
 import { chatJson } from '../llm/provider.js';
-import { STRATEGY_SCHEMA, validatePlan, normalizePlan } from './schema.js';
+import { PREANALYSIS_SCHEMA, validatePlan, normalizePlan } from './schema.js';
 import { buildPreAnalysisPrompt } from './prompts.js';
-import { buildRulesPlan } from './rules.js';
+import { buildFallbackPlan } from './fallback.js';
 import { strategyCacheKey, readStrategyCache, writeStrategyCache } from './cache.js';
 
 /**
- * 生成七层作战地图。
+ * 生成七大层面试计划。
  * @param {object} opts
  * @param {object} opts.resumeVersion 简历版本对象（需含 versionId / versionNo / profile / rawText）
  * @param {object} opts.company       公司对象（需含 companyId / name）
@@ -45,7 +45,7 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
   if (llm) {
     try {
       const messages = buildPreAnalysisPrompt({ resumeVersion, company, position });
-      const data = await chatJson(llm, messages, STRATEGY_SCHEMA);
+      const data = await chatJson(llm, messages, PREANALYSIS_SCHEMA);
       const check = data ? validatePlan(data) : null;
       if (check?.valid) {
         const plan = normalizePlan(data);
@@ -61,7 +61,7 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
   }
 
   // 3. 规则兜底：无 key / LLM 失败 / 结构不合法时保证输出
-  const plan = buildRulesPlan({ resumeVersion, company, position });
+  const plan = buildFallbackPlan({ resumeVersion, company, position });
   const check = validatePlan(plan);
   if (!check.valid) {
     // 规则兜底本身必须合法；若非法说明代码 bug，直接抛错暴露

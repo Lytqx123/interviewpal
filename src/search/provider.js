@@ -1,6 +1,6 @@
 import { CACHE_TTL_MS } from '../archive/constants.js';
 
-// 联网检索的统一入口。阶段二先把接口定下来：
+// 联网检索的统一入口（方案书 §5.3）：
 //   search(query) -> [{ title, url, snippet, publishedAt, confidence }]
 // 默认 mock，方便本地没有搜索 API key 时联调整条流水线。
 export function createSearchProvider({ provider = 'mock', apiKey } = {}) {

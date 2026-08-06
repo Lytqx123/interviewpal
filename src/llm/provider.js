@@ -1,6 +1,6 @@
 // 文本 LLM 的统一入口。
 //
-// 阶段二先按 OpenAI 兼容的 chat completions 协议实现（DeepSeek / 通义 /
+// 先按 OpenAI 兼容的 chat completions 协议实现（DeepSeek / 通义 /
 // 豆包 Ark 都兼容这个协议，只是 baseUrl 和 model 不同），后面要换 provider
 // 只改这里的工厂函数。
 export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model = 'deepseek-chat' } = {}) {

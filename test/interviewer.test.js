@@ -4,7 +4,7 @@ import {
   createSession, startInterview, askFollowup, nextQuestion, buildBaselinePlan, closeInterview, getSessionSummary, ingestSignal,
   openingByRules, followupByRules, closingByRules,
 } from '../src/interviewer/index.js';
-import { buildRulesPlan } from '../src/strategy/rules.js';
+import { buildFallbackPlan } from '../src/preanalysis/fallback.js';
 
 // 测试用简历画像（覆盖技能/经历/公司）
 const RESUME = {
@@ -259,10 +259,10 @@ describe('面试官 · LLM 路径', () => {
   });
 });
 
-// ============ R2：预分析策略模式（baseline + 实时信号 + 动态调整） ============
+// ============ 预分析策略模式（方案书 §5.4：baseline + 实时信号 + 动态调整） ============
 
 function r2StrategyPlan() {
-  return buildRulesPlan({
+  return buildFallbackPlan({
     resumeVersion: {
       versionId: 'ver_1',
       versionNo: 1,
@@ -283,7 +283,7 @@ function r2StrategyPlan() {
   });
 }
 
-describe('面试官 · 预分析策略模式（R2）', () => {
+describe('面试官 · 预分析策略模式（方案书 §5.4）', () => {
   const plan = r2StrategyPlan();
 
   it('createSession：不传 strategyPlan 显式回退规则模式，传了走策略模式', () => {
@@ -297,19 +297,19 @@ describe('面试官 · 预分析策略模式（R2）', () => {
     assert.ok(s.baselinePlan.items.length >= 5);
   });
 
-  it('buildBaselinePlan：题数 ≥5 且每题对应 L4 主线之一', () => {
-    const ids = new Set(plan.layers.mustAskMainlines.map((m) => m.id));
+  it('buildBaselinePlan：题数 ≥5 且每题对应④层追问链之一', () => {
+    const ids = new Set(Object.values(plan.layers.roundStrategy).flatMap((r) => (r.followupChains ?? []).map((c) => c.id)));
     for (const round of ['round1', 'round2', 'round3']) {
       const bp = buildBaselinePlan(plan, round);
       assert.ok(bp.items.length >= 5, `${round} 题数 ${bp.items.length} >= 5`);
       for (const item of bp.items) {
-        assert.ok(ids.has(item.mainlineId), `${item.mainlineId} 属于 L4 主线`);
+        assert.ok(ids.has(item.mainlineId), `${item.mainlineId} 属于④层追问链`);
       }
-      assert.ok(bp.positioning, `${round} 有 L7 轮次定位`);
+      assert.ok(bp.positioning, `${round} 有⑦节奏/④策略定位`);
     }
   });
 
-  it('buildBaselinePlan：二面与一面差异化（业务面 + 前沿探索来自 L7/roundContext）', () => {
+  it('buildBaselinePlan：二面与一面差异化（业务面 + 前沿探索来自⑦节奏/roundContext）', () => {
     const r1 = buildBaselinePlan(plan, 'round1');
     const r2 = buildBaselinePlan(plan, 'round2', {
       responsibilities: ['负责订单系统设计'],
@@ -317,7 +317,7 @@ describe('面试官 · 预分析策略模式（R2）', () => {
       frontierTopics: [{ topic: '大模型 Agent 面试新趋势' }],
     });
     assert.notEqual(r1.items[0].mainlineId, r2.items[0].mainlineId, '二面主线排序与一面不同');
-    assert.notEqual(r1.positioning.focus, r2.positioning.focus, 'L7 轮次定位不同');
+    assert.notEqual(r1.positioning.rhythm.curve, r2.positioning.rhythm.curve, '⑦节奏体验随轮次不同');
     assert.ok(r2.items.some((i) => i.question.includes('大模型 Agent 面试新趋势')), '前沿探索注入');
     assert.ok(r2.items.some((i) => i.question.includes('订单系统设计')), '业务职责注入');
   });
@@ -339,13 +339,13 @@ describe('面试官 · 预分析策略模式（R2）', () => {
     await startInterview(session);
     assert.equal(session.state, 'running');
     const f1 = await nextQuestion(session, '我负责订单系统的核心模块，做了 Redis 缓存');
-    assert.equal(f1.mainlineId, plan.layers.mustAskMainlines[0].id);
+    assert.equal(f1.mainlineId, plan.layers.roundStrategy.round1.followupChains[0].id);
 
     const f2 = await nextQuestion(session, '技术方案我不太清楚，没深入研究过，嗯……就是就是……这个……');
     assert.equal(f2.adjustment, 'level-down');
     assert.equal(f2.mainlineId, f1.mainlineId);
     assert.equal(session.state, 'adjusting');
-    const medium = plan.layers.followupTree.find((f) => f.mainlineId === f1.mainlineId && f.level === 'medium');
+    const medium = plan.layers.roundStrategy.round1.followupChains.find((c) => c.id === f1.mainlineId).chain.find((f) => f.level === 'medium');
     assert.equal(f2.question, medium.question, '降档到 medium 追问');
   });
 
@@ -378,7 +378,7 @@ describe('面试官 · 预分析策略模式（R2）', () => {
     assert.equal(f2.adjustment, 'level-down');
     const f3 = await nextQuestion(session, '方案还是不太清楚，嗯……就是就是……');
     assert.notEqual(f3.adjustment, 'level-down');
-    assert.notEqual(f3.mainlineId, 'm1');
+    assert.notEqual(f3.mainlineId, 'r1c1');
   });
 
   it('executionTrace：关闭后输出每题耗时、信号、是否换线', async () => {

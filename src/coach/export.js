@@ -1,4 +1,4 @@
-// P1：复盘导出（阶段八可选）。
+// P1：复盘报告导出（方案书 §4.1）。
 // 把复盘记录导出为可分享的文本/Markdown 文档，便于存档或分享给导师求教。
 import { formatReport } from './report.js';
 import { SCORE_RUBRIC } from './rules.js';

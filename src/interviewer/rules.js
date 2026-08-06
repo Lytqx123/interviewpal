@@ -167,7 +167,7 @@ function getStrategy(jobType) {
   return FOLLOWUP_STRATEGIES[jobType] ?? DEFAULT_STRATEGY;
 }
 
-// ============ 阶段八：二面（业务面）/ 三面（终面）差异化策略 ============
+// ============ 轮次差异化策略（方案书 §5.4：一面简历面 / 二面业务面 / 三面总监交叉面） ============
 // 二面核心要求：以"岗位职责 + 目标公司实际业务"为主要参考资料展开，
 // 并联网搜索设计前沿探索类题目，考察应对突发情况的压力与思维拓展力。
 // 三面：职业规划 / 价值观契合 / 抗压综合素质。
@@ -280,19 +280,23 @@ export function openingByRules({ resumeProfile, jobProfile, roundKey }) {
 }
 
 // 按 roundKey 选策略池：一面简历面（jobType 驱动）/ 二面业务面 / 三面终面
-// ============ R2：预分析策略模式（baseline + 实时信号 + 动态调整） ============
-// strategyPlan 缺失时显式降级为上方"职位类型策略池"（重构计划回退条款）。
-// 决策：继续（消费 baseline）→ 追问（followupTree 深档）→ 降档/拉回/换线 → 结束。
+// ============ 预分析策略模式（方案书 §5.4：以预分析为基线，实时动态调整） ============
+// 预分析缺失时显式降级为上方职位类型策略池（方案书 §5.5 规则兜底）。
+// 决策：继续（消费 baseline）→ 追问（④层追问链深档）→ 降档/拉回/换线 → 结束。
 
 function askedQuestions(session) {
   return new Set(session.turns.filter((t) => t.role === 'interviewer').map((t) => t.content));
 }
 
-function pickFollowup(plan, mainlineId, level, asked) {
-  const tree = (plan?.layers?.followupTree ?? []).filter(
-    (f) => f.mainlineId === mainlineId && f.level === level,
-  );
-  return tree.find((f) => !asked.has(f.question)) ?? tree[0] ?? null;
+function findChain(session, mainlineId) {
+  const chains = session.strategyPlan?.layers?.roundStrategy?.[session.roundKey]?.followupChains ?? [];
+  return chains.find((c) => c.id === mainlineId) ?? null;
+}
+
+function pickFollowup(session, mainlineId, level, asked) {
+  const chain = findChain(session, mainlineId);
+  const items = (chain?.chain ?? []).filter((f) => f.level === level);
+  return items.find((f) => !asked.has(f.question)) ?? items[0] ?? null;
 }
 
 function nextBaseline(session, baseline) {
@@ -322,7 +326,7 @@ function nextBaseline(session, baseline) {
 
 function pullBack(currentItem) {
   return {
-    question: `我们回到刚才的问题：${currentItem.question}（刚才的回答有点跑题，换个角度再说说）`,
+    question: '我们回到刚才的问题：' + currentItem.question + '（刚才的回答有点跑题，换个角度再说说）',
     focusArea: currentItem.focus,
     intent: '拉回话题',
     mainlineId: currentItem.mainlineId,
@@ -330,14 +334,14 @@ function pullBack(currentItem) {
   };
 }
 
-function levelDown(session, plan, currentItem) {
+function levelDown(session, currentItem) {
   const asked = askedQuestions(session);
   const lower =
-    pickFollowup(plan, currentItem.mainlineId, 'medium', asked) ??
-    pickFollowup(plan, currentItem.mainlineId, 'shallow', asked);
+    pickFollowup(session, currentItem.mainlineId, 'medium', asked) ??
+    pickFollowup(session, currentItem.mainlineId, 'shallow', asked);
   session.adjustedMainlineId = currentItem.mainlineId;
   return {
-    question: lower?.question ?? `换个更简单的角度再说一下：${currentItem.question}`,
+    question: lower?.question ?? '换个更简单的角度再说一下：' + currentItem.question,
     focusArea: currentItem.focus,
     intent: lower?.intent ?? '降档追问',
     mainlineId: currentItem.mainlineId,
@@ -350,15 +354,15 @@ function switchLine(session, baseline) {
   if (next.done) return next;
   return {
     ...next,
-    question: `我们换个角度来聊。${next.question}`,
+    question: '我们换个角度来聊。' + next.question,
     adjustment: 'switch-line',
   };
 }
 
-// 策略模式决策入口：每条主线最多 1 次档位调整；换线需 2 个信号叠加（难度高+流畅差+浅薄，或偏题+浅薄）。
+// 策略模式决策入口：每条追问链最多 1 次档位调整；换线需 2 个信号叠加
+// （难度高+流畅差+浅薄，或偏题+浅薄）——防止面试跳跃（方案书 §5.4 风险对策）。
 export function nextQuestionByRules(session, signals) {
   const baseline = session.baselinePlan?.items ?? [];
-  const plan = session.strategyPlan;
   const currentId = session.currentMainlineId;
   const currentItem = baseline.find((i) => i.mainlineId === currentId) ?? null;
   const alreadyAdjusted = session.adjustedMainlineId === currentId;
@@ -370,11 +374,11 @@ export function nextQuestionByRules(session, signals) {
     if (collapsed) return switchLine(session, baseline);
     if (off && signals.depth === 'shallow') return switchLine(session, baseline);
     if (off) return pullBack(currentItem);
-    if (stuck) return levelDown(session, plan, currentItem);
+    if (stuck) return levelDown(session, currentItem);
   }
 
   if (currentId && currentItem && signals?.direction === 'on_topic' && signals.depth === 'deep' && signals.difficulty !== 'high') {
-    const deep = pickFollowup(plan, currentId, 'deep', askedQuestions(session));
+    const deep = pickFollowup(session, currentId, 'deep', askedQuestions(session));
     if (deep) {
       return {
         question: deep.question,

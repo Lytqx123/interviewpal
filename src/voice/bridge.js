@@ -1,4 +1,4 @@
-// 阶段四：实时语音通话链路 —— Node 本地中继。
+// 实时语音通话链路（方案书 §4.6）：Node 本地中继，Gateway 侧适配豆包实时语音协议。
 //
 // 豆包实时语音端点只用 X-Api-* HTTP header 鉴权（APP ID + Access Token），
 // 浏览器原生 WebSocket 无法携带自定义 header，因此由本服务：

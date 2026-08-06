@@ -1,9 +1,9 @@
-// 记忆闭环编排层（阶段七：记忆闭环与困难题沉淀）。
-// 把"教练复盘（阶段六）"和"档案库（阶段一）"、"渠道回传"串成闭环：
+// 记忆闭环编排层（方案书 §5.7：记忆闭环与困难题沉淀）。
+// 把"教练复盘（§5.7）"和"档案库（§5.2/§5.6）"、"渠道回传"串成闭环：
 //   读同公司同轮次上次复盘 → 复盘评估 → 跨场次增强对比（重复题/改进项完成率/上次也卡壳）
 //   → 可勾选改进清单 → 写入档案库 + 更新轮次状态 → 报告回传渠道。
 //
-// 设计原则：coach 模块本身不依赖档案库（保持阶段六自洽），记忆闭环依赖由本文件承担。
+// 设计原则：coach 模块本身不依赖档案库（保持复盘自洽），记忆闭环依赖由本文件承担。
 // 联网调研依据：Learning Loop（Reflect→Iterate）、三层复盘法第二层"跨多次练习趋势对比"。
 import { reviewInterview, generateReport } from './engine.js';
 import {
@@ -32,7 +32,7 @@ export async function reviewWithMemory(session, {
   // 1. 读上次复盘：同公司同岗位同轮次最近一场（listReviews 已按时间倒序，[0] 即上次）
   const lastReview = store.listReviews({ companyId, positionId, roundKey })[0] ?? null;
 
-  // 2. 复盘评估（带 lastReview 做六维升降对比，阶段六已实现）
+  // 2. 复盘评估（带 lastReview 做六维升降对比）
   const result = await reviewInterview(session, { lastReview, llm });
 
   // 3. 跨场次增强对比 + 困难题标注（仅当有上次复盘时）
@@ -64,7 +64,7 @@ export async function reviewWithMemory(session, {
   return { result, record: saved, report, lastReview };
 }
 
-// 跨场次对比增强：在阶段六维度升降基础上，叠加重复题对比 + 改进项完成率。
+// 跨场次对比增强：在六维升降基础上，叠加重复题对比 + 改进项完成率。
 function enrichComparison(result, session, lastReview) {
   const base = result.comparedWithLast ?? { progress: {}, summary: '首次面试，无对比' };
   const currentQuestions = extractSessionQuestions(session);

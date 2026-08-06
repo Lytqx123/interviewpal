@@ -1,7 +1,7 @@
 {
   "name": "interviewpal",
   "version": "0.1.0",
-  "description": "求职面试陪练 Agent —— 档案库数据模型（阶段一）",
+  "description": "Offer 陪练（InterviewPal）：基于 OpenClaw 的求职面试陪练 Agent",
   "private": true,
   "type": "module",
   "engines": {

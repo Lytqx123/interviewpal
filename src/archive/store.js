@@ -25,7 +25,7 @@ const VERSION_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
  *       cache/<roundKey>.json         检索缓存（按轮次打标签，§5.5）
  *       reviews/*.json                复盘记录（§5.7/§5.9）
  *
- * 阶段一先用 JSON 文件 + 目录当存储：零依赖、可以直接看、可以手工改。
+ * 先用 JSON 文件 + 目录当存储（档案库 §5.2/§5.6）：零依赖、可以直接看、可以手工改。
  * 后面场次多起来或者要并发写，再换 SQLite / OpenClaw 自带的 memory 机制。
  */
 export class ArchiveStore {
@@ -146,7 +146,7 @@ export class ArchiveStore {
     if (!rawText || typeof rawText !== 'string') {
       throw new Error('resume rawText required');
     }
-    // 版本号直接用当前数量 +1；阶段三单用户本地跑，够用，后面并发写再换序列。
+    // 版本号直接用当前数量 +1；单用户本地跑，够用，后面并发写再换序列。
     const versionNo = this.listResumeVersions().length + 1;
     const version = {
       version: 1,

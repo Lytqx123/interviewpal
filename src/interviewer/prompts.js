@@ -1,9 +1,8 @@
-// 面试官 LLM system prompt 构建。
-// 核心思路（联网调研最佳实践）：Context is King——把简历画像、JD 画像、
-// 轮次定位、岗位类型追问策略全部塞进 system prompt，让模型生成精准的问题。
-// 一次只问一个问题，追问方向由岗位类型驱动，深度递进。
+// 面试官 LLM system prompt 构建（方案书 §5.5：每轮提示词由预分析驱动，引擎只有一套）。
+// 组装顺序：全局上下文 → 预分析全局层（①②⑤）→ 预分析轮次层（③④⑦）→ 当次数据。
+// 一次只问一个问题，追问方向由预分析④层追问链驱动；规则回退模式按岗位类型策略池。
 
-// 岗位类型 → 追问策略描述（供 LLM 参考方向，与 rules.js 的策略池对齐）
+// 岗位类型 → 追问策略描述（规则回退模式使用，方案书 §5.5 规则兜底）
 const JOBTYPE_STRATEGY_DESC = {
   tech: '技术岗：追问方向为 项目深挖（选简历项目问技术方案与难点）→ 技术原理/八股（技能栈底层原理）→ 系统设计（架构与技术选型）',
   product: '产品岗：追问方向为 场景设计（产品场景与目标用户）→ 取舍决策（优先级与决策框架）→ 数据验证（指标与验证方法）',
@@ -13,19 +12,18 @@ const JOBTYPE_STRATEGY_DESC = {
   civil: '公考岗：追问方向为 政策理解（政策把握）→ 情景处置（应急反应）→ 价值观（价值取向与责任意识）',
 };
 
-// 轮次定位（方案书 §5.4：一面简历面 / 二面业务面 / 三面终面）
+// 轮次定位（方案书 §5.4：一面简历面 / 二面业务面 / 三面总监交叉面）
 const ROUND_DESC = {
   round1: '一面（简历面）：聚焦简历经历的真实性、技能栈基础、项目细节。目标是验证候选人"写的是不是真的"。',
   round2: '二面（业务面）：聚焦岗位匹配度、业务场景、项目深度。目标是验证"能不能胜任这个岗位"。',
-  round3: '三面（终面）：聚焦价值观、抗压能力、职业规划、综合判断。目标是验证"适不适合这个团队"。',
+  round3: '三面（总监交叉面）：聚焦价值观、抗压能力、职业规划、综合判断。目标是验证"适不适合这个团队"。',
 };
 
 function describeJobType(jobType) {
   return JOBTYPE_STRATEGY_DESC[jobType] ?? JOBTYPE_STRATEGY_DESC.tech;
 }
 
-// 阶段八：二面业务面上下文块——岗位职责 + 目标公司实际业务 + 联网前沿话题。
-// 这是二面"以岗位职责和公司实际业务为主要参考资料展开"的核心承载。
+// 二面业务面上下文块（方案书 §5.4：目标岗位画像 + §5.3 联网补全的公司业务/前沿话题）
 function roundContextBlock(roundContext) {
   if (!roundContext) return '';
   const { responsibilities = [], companyBusiness = [], frontierTopics = [] } = roundContext;
@@ -38,23 +36,26 @@ function roundContextBlock(roundContext) {
   return lines.join('\n') + '\n';
 }
 
-// 开场白 prompt：生成开场白 + 首个问题
-// ============ R2：预分析作战地图注入 + 动态调整指令 ============
-// 在旧 prompt 基础上追加 L1 候选画像 + L4 必问主线 + L6 评分锚点 + L7 轮次定位，
-// 并给策略模式追加"卡顿降档 / 偏题拉回 / 崩盘换线"指令。
+// ============ 预分析作战地图注入 + 动态调整指令（方案书 §5.4/§5.5） ============
 
 export function strategyPlanBlock(session) {
   const plan = session?.strategyPlan;
   if (!plan?.layers) return '';
   const { layers } = plan;
-  const positioning = layers.roundPositioning?.[session.roundKey] ?? null;
+  const roundKey = session.roundKey;
+  const persona = layers.interviewerPersona?.[roundKey] ?? null;
+  const strategy = layers.roundStrategy?.[roundKey] ?? null;
+  const rhythm = layers.rhythmDesign?.[roundKey] ?? null;
   const baseline = session.baselinePlan?.items ?? [];
   return [
     '【预分析作战地图】',
-    `L1 候选画像摘要：${JSON.stringify(layers.candidateProfile ?? {})}`,
-    `L4 必问主线：${JSON.stringify(layers.mustAskMainlines ?? [])}`,
-    `L6 评分锚点：${JSON.stringify(layers.scoreAnchors ?? {})}`,
-    `L7 轮次定位（${session.roundKey}）：${JSON.stringify(positioning ?? {})}`,
+    `① JD 深度解析：${JSON.stringify(layers.jdAnalysis ?? {})}`,
+    `② 候选人画像：${JSON.stringify(layers.candidateProfile ?? {})}`,
+    `③ 本轮面试官人设（${roundKey}）：${JSON.stringify(persona ?? {})}`,
+    `④ 本轮考察策略（${roundKey}）：${JSON.stringify(strategy ?? {})}`,
+    `⑤ 风险预判：${JSON.stringify(layers.riskForecast ?? {})}`,
+    `⑥ 复盘评分框架：${JSON.stringify(layers.reviewFramework ?? {})}`,
+    `⑦ 本轮节奏体验（${roundKey}）：${JSON.stringify(rhythm ?? {})}`,
     `当前 baseline 队列：${JSON.stringify(
       baseline.slice(0, 8).map((i) => ({ mainlineId: i.mainlineId, focus: i.focus, question: i.question })),
     )}`,
@@ -62,11 +63,14 @@ export function strategyPlanBlock(session) {
 }
 
 export function dynamicAdjustmentInstruction() {
-  return `【动态调整指令】（仅用于追问决策）
-1. 若候选人回答口语卡顿（嗯/就是就是/重复）或明显答不上来 → 降一档追问（深→中或中→浅）
-2. 若候选人偏题跑题 → 先用话术拉回原问题
-3. 若深挖时回答崩盘（难度高 + 流畅差 + 浅薄）→ 换到下一个必问主线
-4. 每条主线最多只降档 1 次；换线需要 2 个信号叠加，避免面试跳跃`;
+  return `【动态调整指令】（方案书 §5.4：计划是基线，不是脚本）
+1. 候选人展现意外深度（超出预判）→ 突破计划深度，延伸追问到真正的能力边界
+2. 候选人暴露预分析未覆盖的新弱点 → 临时插入追问，探索新弱点的范围与影响
+3. 候选人严重卡壳（超出预判程度）→ 降低后续难度（深→中或中→浅），调用⑤层救援策略
+4. 候选人说出与简历矛盾的内容 → 立即切换验证模式，顺着矛盾点追问到底
+5. 候选人主动引导话题到擅长领域 → 先让 ta 展示，再在擅长领域施压测试上限
+6. 时间不够、剩余考察维度多 → 按优先级砍低权重维度，保住①层红线项与核心能力
+每条追问链最多只降档 1 次；换线需要 2 个信号叠加，避免面试跳跃`;
 }
 
 export function buildOpeningPrompt(opts) {
@@ -91,6 +95,7 @@ export function buildFollowupPrompt(session, candidateAnswer, signals = null, de
   return parts.join('\n\n');
 }
 
+// 开场白 prompt：生成开场白 + 首个问题（规则回退模式的基础模板）
 export function buildOpeningPromptBase({ resumeProfile, jobProfile, roundKey, roundContext }) {
   return `你是一位经验丰富的面试官，正在面试一位应聘"${jobProfile.title}"岗位的候选人，公司是${jobProfile.companyName ?? '我们公司'}。
 
@@ -117,7 +122,7 @@ ${JSON.stringify(jobProfile, null, 2)}
 {"greeting":"开场白","question":"第一个问题","focusArea":"追问方向","intent":"考察意图"}`;
 }
 
-// 追问 prompt：根据候选人回答生成下一个追问
+// 追问 prompt：根据候选人回答生成下一个追问（规则回退模式的基础模板）
 export function buildFollowupPromptBase(session, candidateAnswer) {
   const dialogue = session.turns
     .map((t) => (t.role === 'interviewer' ? `面试官：${t.content}` : `候选人：${t.content}`))

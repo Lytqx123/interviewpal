@@ -249,7 +249,7 @@ function tmpStore(t) {
   return new ArchiveStore(dir);
 }
 
-describe('复盘教练 · 阶段七记忆闭环（跨场次对比）', () => {
+describe('复盘教练 · 记忆闭环-跨场次对比（方案书 §5.7）', () => {
   it('extractSessionQuestions：只提取面试官问题', () => {
     const qs = extractSessionQuestions(mockSession(GOOD_ANSWERS));
     assert.equal(qs.length, 3, '3 个面试官问题');
@@ -308,7 +308,7 @@ describe('复盘教练 · 阶段七记忆闭环（跨场次对比）', () => {
   });
 });
 
-describe('复盘教练 · 阶段七记忆闭环（编排层）', () => {
+describe('复盘教练 · 记忆闭环-编排层（方案书 §5.7）', () => {
   it('reviewWithMemory：连续两场，第二场有上次对比+重复题+完成率', async (t) => {
     const store = tmpStore(t);
     const company = store.createCompany({ name: '测试公司' });

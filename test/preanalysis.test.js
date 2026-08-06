@@ -6,19 +6,19 @@ import path from 'node:path';
 
 import { ArchiveStore } from '../src/archive/index.js';
 import { chatJson } from '../src/llm/provider.js';
-import { generatePlan } from '../src/strategy/preAnalysis.js';
+import { generatePlan } from '../src/preanalysis/engine.js';
 import {
-  STRATEGY_SCHEMA,
+  PREANALYSIS_SCHEMA,
   validatePlan,
   countSubDimensions,
   normalizePlan,
   MIN_SUB_DIMENSIONS,
-} from '../src/strategy/schema.js';
-import { buildRulesPlan } from '../src/strategy/rules.js';
-import { strategyCacheKey } from '../src/strategy/cache.js';
+} from '../src/preanalysis/schema.js';
+import { buildFallbackPlan } from '../src/preanalysis/fallback.js';
+import { strategyCacheKey } from '../src/preanalysis/cache.js';
 
 function tmpStore(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ip-strategy-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ip-preanalysis-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return new ArchiveStore(dir);
 }
@@ -27,7 +27,7 @@ function makeResumeVersion(overrides = {}) {
   return {
     versionId: 'ver_test_1',
     versionNo: 1,
-    rawText: '张三，熟悉 Redis、Kafka。2020 年在字节跳动负责订单系统，QPS 从 500 提升到 2000。',
+    rawText: '张三，熟悉 Redis、Kafka，2020 年在字节跳动负责订单系统，QPS 从 500 提升到 2000。',
     profile: {
       basics: { name: '张三', title: '后端工程师' },
       companies: ['字节跳动'],
@@ -44,7 +44,7 @@ function makeResumeVersion(overrides = {}) {
 }
 
 function makeCompany(overrides = {}) {
-  return { companyId: 'c_1', name: '星辰科技', archived: false, notes: '', ...overrides };
+  return { companyId: 'c_1', name: '星宸科技', archived: false, notes: '', ...overrides };
 }
 
 function makePosition(overrides = {}) {
@@ -73,18 +73,18 @@ function fakeLlm({ onCall, output } = {}) {
   return chat;
 }
 
-test('schema：七层结构校验拒绝非法 plan', () => {
-  const bad = validatePlan({ layers: { candidateProfile: {} } });
+test('schema：七大层结构校验拒绝非法 plan', () => {
+  const bad = validatePlan({ layers: { jdAnalysis: {} } });
   assert.equal(bad.valid, false);
   assert.ok(bad.errors.length > 0);
-  assert.ok(bad.errors.some((e) => e.includes('riskPoints')));
+  assert.ok(bad.errors.some((e) => e.includes('candidateProfile')), '缺②候选人画像层');
 
   const notPlan = validatePlan(null);
   assert.equal(notPlan.valid, false);
 });
 
 test('schema：规则兜底 plan 合法且子维度数 ≥ 45', () => {
-  const plan = buildRulesPlan({
+  const plan = buildFallbackPlan({
     resumeVersion: makeResumeVersion(),
     company: makeCompany(),
     position: makePosition(),
@@ -95,7 +95,7 @@ test('schema：规则兜底 plan 合法且子维度数 ≥ 45', () => {
   assert.ok(countSubDimensions(plan) >= MIN_SUB_DIMENSIONS);
 });
 
-test('generatePlan：无 LLM 时走规则兜底，输出合法 7 层结构', async () => {
+test('generatePlan：无 LLM 时走规则兜底，输出合法七大层', async () => {
   const result = await generatePlan({
     resumeVersion: makeResumeVersion(),
     company: makeCompany(),
@@ -110,12 +110,12 @@ test('generatePlan：无 LLM 时走规则兜底，输出合法 7 层结构', asy
 });
 
 test('generatePlan：LLM 返回合法 JSON 走 LLM 路径', async () => {
-  const rulesPlan = buildRulesPlan({
+  const fallback = buildFallbackPlan({
     resumeVersion: makeResumeVersion(),
     company: makeCompany(),
     position: makePosition(),
   });
-  const llm = fakeLlm({ output: JSON.stringify(rulesPlan) });
+  const llm = fakeLlm({ output: JSON.stringify(fallback) });
   const result = await generatePlan({
     resumeVersion: makeResumeVersion(),
     company: makeCompany(),
@@ -146,13 +146,13 @@ test('generatePlan：LLM 输出结构不合法（缺层/子维度不足）自动
   const llm = fakeLlm({
     output: JSON.stringify({
       layers: {
-        candidateProfile: { strengths: ['a'], weaknesses: ['b'], redFlags: ['c'] },
-        positionFit: { hardSkills: ['x'], softSkills: ['y'], experienceFit: 'z' },
-        riskPoints: [],
-        mustAskMainlines: [],
-        followupTree: [],
-        scoreAnchors: {},
-        roundPositioning: {},
+        jdAnalysis: {},
+        candidateProfile: {},
+        interviewerPersona: {},
+        roundStrategy: {},
+        riskForecast: {},
+        reviewFramework: {},
+        rhythmDesign: {},
       },
     }),
   });
@@ -169,7 +169,7 @@ test('缓存：同一 简历版本+公司+岗位 二次调用命中缓存，LLM 
   const store = tmpStore(t);
   const llm = fakeLlm({
     output: JSON.stringify(
-      buildRulesPlan({ resumeVersion: makeResumeVersion(), company: makeCompany(), position: makePosition() }),
+      buildFallbackPlan({ resumeVersion: makeResumeVersion(), company: makeCompany(), position: makePosition() }),
     ),
   });
   const first = await generatePlan({
@@ -202,7 +202,7 @@ test('缓存：简历版本变化后自动失效重新生成', async (t) => {
     onCall: () => calls++,
     output: () =>
       JSON.stringify(
-        buildRulesPlan({ resumeVersion: makeResumeVersion(), company: makeCompany(), position: makePosition() }),
+        buildFallbackPlan({ resumeVersion: makeResumeVersion(), company: makeCompany(), position: makePosition() }),
       ),
   });
   const args = (versionId, versionNo) => ({
@@ -227,7 +227,7 @@ test('缓存：删除岗位后该岗位预分析缓存被释放', async (t) => {
   const store = tmpStore(t);
   const llm = fakeLlm({
     output: JSON.stringify(
-      buildRulesPlan({ resumeVersion: makeResumeVersion(), company: makeCompany(), position: makePosition() }),
+      buildFallbackPlan({ resumeVersion: makeResumeVersion(), company: makeCompany(), position: makePosition() }),
     ),
   });
   await generatePlan({
@@ -248,7 +248,7 @@ test('缓存：删除公司后该公司所有岗位的预分析缓存被释放',
   const store = tmpStore(t);
   const llm = fakeLlm({
     output: JSON.stringify(
-      buildRulesPlan({ resumeVersion: makeResumeVersion(), company: makeCompany(), position: makePosition() }),
+      buildFallbackPlan({ resumeVersion: makeResumeVersion(), company: makeCompany(), position: makePosition() }),
     ),
   });
   await generatePlan({
@@ -290,14 +290,14 @@ test('chatJson：围栏 JSON 可解析，垃圾输出返回 null', async () => {
   const good = await chatJson(
     fakeLlm({ output: '```json\n{"ok":true}\n```' }),
     [{ role: 'user', content: 'hi' }],
-    STRATEGY_SCHEMA,
+    PREANALYSIS_SCHEMA,
   );
   assert.deepEqual(good, { ok: true });
 
   const bad = await chatJson(
     fakeLlm({ output: '这不是 JSON' }),
     [{ role: 'user', content: 'hi' }],
-    STRATEGY_SCHEMA,
+    PREANALYSIS_SCHEMA,
   );
   assert.equal(bad, null);
 });
@@ -313,7 +313,7 @@ test('store：strategyCache 读写与更新时间', (t) => {
 });
 
 test('normalizePlan：缺失版本号补 1', () => {
-  const plan = buildRulesPlan({
+  const plan = buildFallbackPlan({
     resumeVersion: makeResumeVersion(),
     company: makeCompany(),
     position: makePosition(),
