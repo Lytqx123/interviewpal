@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { createSession, startInterview, askFollowup } from '../src/interviewer/index.js';
+import { createSession, startInterview } from '../src/interviewer/index.js';
 import { diagnoseBaseline, passRecommendation, analyzeRhythm, getQuestions, recommendByWeakness, exportReview, createInterviewerAgent, createCoachAgent } from '../src/coach/index.js';
 import { ArchiveStore } from '../src/archive/index.js';
 

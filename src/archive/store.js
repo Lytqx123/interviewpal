@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { newId } from './ids.js';
-import { ROUND_KEYS, JOB_TYPES, CACHE_TTL_MS, STRATEGY_CACHE_FILE } from './constants.js';
+import { ROUND_KEYS, JOB_TYPES, CACHE_TTL_MS, PREANALYSIS_CACHE_FILE } from './constants.js';
 import { emptyRounds } from './entities.js';
 
 // companyId / positionId 只允许这些字符，防止路径穿越。
@@ -256,7 +256,7 @@ export class ArchiveStore {
   deleteCompany(companyId) {
     this.assertCompanyId(companyId);
     fs.rmSync(this.companyDir(companyId), { recursive: true, force: true });
-    this.deleteStrategyCacheByCompany(companyId);
+    this.deletePreanalysisCacheByCompany(companyId);
     return true;
   }
 
@@ -304,7 +304,7 @@ export class ArchiveStore {
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
     }
-    this.deleteStrategyCacheByPosition(companyId, positionId);
+    this.deletePreanalysisCacheByPosition(companyId, positionId);
     return true;
   }
 
@@ -472,58 +472,58 @@ export class ArchiveStore {
     }
   }
 
-  // ---------- 预分析缓存（七层作战地图，§5.4/§5.5） ----------
+  // ---------- 预分析缓存（七大层面试计划，§5.4/§5.5） ----------
 
-  strategyCachePath() {
-    return path.join(this.root, STRATEGY_CACHE_FILE);
+  preanalysisCachePath() {
+    return path.join(this.root, PREANALYSIS_CACHE_FILE);
   }
 
   // 整表读写：{ version: 1, entries: { [key]: { plan, createdAt, updatedAt } } }
-  readStrategyCacheTable() {
-    return this.readJson(this.strategyCachePath(), { version: 1, entries: {} });
+  readPreanalysisCacheTable() {
+    return this.readJson(this.preanalysisCachePath(), { version: 1, entries: {} });
   }
 
-  saveStrategyCacheTable(table) {
-    this.saveJson(this.strategyCachePath(), table);
+  savePreanalysisCacheTable(table) {
+    this.saveJson(this.preanalysisCachePath(), table);
   }
 
-  getStrategyCache(key) {
+  getPreanalysisCache(key) {
     if (typeof key !== 'string' || !key) return null;
-    return this.readStrategyCacheTable().entries[key]?.plan ?? null;
+    return this.readPreanalysisCacheTable().entries[key]?.plan ?? null;
   }
 
-  setStrategyCache(key, plan) {
+  setPreanalysisCache(key, plan) {
     if (typeof key !== 'string' || !key) {
-      throw new Error('strategy cache key required');
+      throw new Error('preanalysis cache key required');
     }
     if (!plan || typeof plan !== 'object') {
-      throw new Error('strategy cache plan required');
+      throw new Error('preanalysis cache plan required');
     }
     const now = new Date().toISOString();
-    const table = this.readStrategyCacheTable();
+    const table = this.readPreanalysisCacheTable();
     const existing = table.entries[key];
     table.entries[key] = {
       plan,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
-    this.saveStrategyCacheTable(table);
+    this.savePreanalysisCacheTable(table);
     return table.entries[key];
   }
 
-  deleteStrategyCache(key) {
+  deletePreanalysisCache(key) {
     if (typeof key !== 'string' || !key) return false;
-    const table = this.readStrategyCacheTable();
+    const table = this.readPreanalysisCacheTable();
     if (!(key in table.entries)) return false;
     delete table.entries[key];
-    this.saveStrategyCacheTable(table);
+    this.savePreanalysisCacheTable(table);
     return true;
   }
 
   // 删除公司：清掉所有 `::<companyId>::` 前缀匹配的缓存键
-  deleteStrategyCacheByCompany(companyId) {
+  deletePreanalysisCacheByCompany(companyId) {
     this.assertCompanyId(companyId);
-    const table = this.readStrategyCacheTable();
+    const table = this.readPreanalysisCacheTable();
     const marker = `::${companyId}::`;
     let changed = false;
     for (const key of Object.keys(table.entries)) {
@@ -532,15 +532,15 @@ export class ArchiveStore {
         changed = true;
       }
     }
-    if (changed) this.saveStrategyCacheTable(table);
+    if (changed) this.savePreanalysisCacheTable(table);
     return changed;
   }
 
   // 删除岗位：清掉 `::<companyId>::<positionId>` 结尾的缓存键
-  deleteStrategyCacheByPosition(companyId, positionId) {
+  deletePreanalysisCacheByPosition(companyId, positionId) {
     this.assertCompanyId(companyId);
     this.assertPositionId(positionId);
-    const table = this.readStrategyCacheTable();
+    const table = this.readPreanalysisCacheTable();
     const suffix = `::${companyId}::${positionId}`;
     let changed = false;
     for (const key of Object.keys(table.entries)) {
@@ -549,7 +549,7 @@ export class ArchiveStore {
         changed = true;
       }
     }
-    if (changed) this.saveStrategyCacheTable(table);
+    if (changed) this.savePreanalysisCacheTable(table);
     return changed;
   }
 

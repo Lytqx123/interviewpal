@@ -19,8 +19,8 @@ export {
 } from './preanalysis/schema.js';
 export { buildPreAnalysisPrompt } from './preanalysis/prompts.js';
 export { buildFallbackPlan } from './preanalysis/fallback.js';
-export { strategyCacheKey } from './preanalysis/cache.js';
-export { createSession, startInterview, askFollowup, nextQuestion, buildBaselinePlan, closeInterview, getSessionSummary, ingestSignal } from './interviewer/index.js';
+export { preanalysisCacheKey } from './preanalysis/cache.js';
+export { createSession, startInterview, nextQuestion, buildBaselinePlan, closeInterview, getSessionSummary, ingestSignal } from './interviewer/index.js';
 export { openingByRules, followupByRules, closingByRules, nextQuestionByRules } from './interviewer/rules.js';
 export { prepareRound2Context, enrichRound2Frontier, roundMetaFromPlan } from './interviewer/rounds.js';
 export { reviewInterview, compareWithLast, generateReport, formatReport, buildReviewPrompt, reviewWithMemory } from './coach/index.js';

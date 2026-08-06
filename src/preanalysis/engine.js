@@ -4,7 +4,7 @@ import { chatJson } from '../llm/provider.js';
 import { PREANALYSIS_SCHEMA, validatePlan, normalizePlan } from './schema.js';
 import { buildPreAnalysisPrompt } from './prompts.js';
 import { buildFallbackPlan } from './fallback.js';
-import { strategyCacheKey, readStrategyCache, writeStrategyCache } from './cache.js';
+import { preanalysisCacheKey, readPreanalysisCache, writePreanalysisCache } from './cache.js';
 
 /**
  * 生成七大层面试计划。
@@ -27,7 +27,7 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
     throw new Error('generatePlan requires position (with positionId)');
   }
 
-  const cacheKey = strategyCacheKey({
+  const cacheKey = preanalysisCacheKey({
     resumeVersion,
     companyId: company.companyId,
     positionId: position.positionId,
@@ -35,7 +35,7 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
 
   // 1. 缓存命中：同一 简历版本+公司+岗位 直接复用
   if (store) {
-    const cached = readStrategyCache(store, cacheKey);
+    const cached = readPreanalysisCache(store, cacheKey);
     if (cached) {
       return { plan: normalizePlan(cached), source: 'cache', cacheKey, cached: true };
     }
@@ -49,14 +49,14 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
       const check = data ? validatePlan(data) : null;
       if (check?.valid) {
         const plan = normalizePlan(data);
-        writeStrategyCache(store, cacheKey, plan);
+        writePreanalysisCache(store, cacheKey, plan);
         return { plan, source: 'llm', cacheKey, cached: false };
       }
       if (data && !check?.valid) {
-        console.warn('[strategy] llm plan invalid, fallback to rules:', check.errors.join('; '));
+        console.warn('[preanalysis] llm plan invalid, fallback to rules:', check.errors.join('; '));
       }
     } catch (err) {
-      console.warn('[strategy] llm pre-analysis failed, fallback to rules:', err.message);
+      console.warn('[preanalysis] llm pre-analysis failed, fallback to rules:', err.message);
     }
   }
 
@@ -65,8 +65,8 @@ export async function generatePlan({ resumeVersion, company, position, llm = nul
   const check = validatePlan(plan);
   if (!check.valid) {
     // 规则兜底本身必须合法；若非法说明代码 bug，直接抛错暴露
-    throw new Error(`strategy rules fallback invalid: ${check.errors.join('; ')}`);
+    throw new Error(`preanalysis rules fallback invalid: ${check.errors.join('; ')}`);
   }
-  writeStrategyCache(store, cacheKey, plan);
+  writePreanalysisCache(store, cacheKey, plan);
   return { plan: normalizePlan(plan), source: 'rules', cacheKey, cached: false };
 }

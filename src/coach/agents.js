@@ -3,7 +3,7 @@
 // 物理拆分意义：两个 Agent 职责正交、可独立部署/独立扩缩容，避免状态互相污染。
 //   - InterviewerAgent：负责生成面试问题，无状态、不读档案库历史
 //   - CoachAgent：负责复盘评估，有记忆、读写档案库
-import { createSession, startInterview, askFollowup, closeInterview } from '../interviewer/index.js';
+import { createSession, startInterview, nextQuestion, closeInterview } from '../interviewer/index.js';
 import { reviewWithMemory } from './memory.js';
 import { diagnoseBaseline, passRecommendation } from './baseline.js';
 import { analyzeRhythm } from './rhythm.js';
@@ -22,7 +22,7 @@ export function createInterviewerAgent({ llm = null, search = null } = {}) {
           return startInterview(session);
         },
         async ask(answer) {
-          return askFollowup(session, answer);
+          return nextQuestion(session, answer);
         },
         async close() {
           return closeInterview(session);

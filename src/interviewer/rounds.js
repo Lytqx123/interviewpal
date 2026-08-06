@@ -8,10 +8,10 @@ import { enrichJd } from '../enrich/enrich.js';
 
 // 从预分析作战地图⑦层读取轮次差异化策略（二面业务面 / 三面总监交叉面），
 // 取代硬编码；预分析缺失时由 rules.js 的职位类型策略池兜底。
-export function roundMetaFromPlan(strategyPlan, roundKey) {
+export function roundMetaFromPlan(preanalysisPlan, roundKey) {
   return {
-    rhythm: strategyPlan?.layers?.rhythmDesign?.[roundKey] ?? null,
-    strategy: strategyPlan?.layers?.roundStrategy?.[roundKey] ?? null,
+    rhythm: preanalysisPlan?.layers?.rhythmDesign?.[roundKey] ?? null,
+    strategy: preanalysisPlan?.layers?.roundStrategy?.[roundKey] ?? null,
   };
 }
 

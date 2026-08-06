@@ -15,7 +15,7 @@ import {
   MIN_SUB_DIMENSIONS,
 } from '../src/preanalysis/schema.js';
 import { buildFallbackPlan } from '../src/preanalysis/fallback.js';
-import { strategyCacheKey } from '../src/preanalysis/cache.js';
+import { preanalysisCacheKey } from '../src/preanalysis/cache.js';
 
 function tmpStore(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ip-preanalysis-'));
@@ -237,10 +237,10 @@ test('缓存：删除岗位后该岗位预分析缓存被释放', async (t) => {
     llm,
     store,
   });
-  assert.ok(store.getStrategyCache('ver_test_1::c_1::p_1'));
+  assert.ok(store.getPreanalysisCache('ver_test_1::c_1::p_1'));
 
   store.deletePosition('c_1', 'p_1');
-  assert.equal(store.getStrategyCache('ver_test_1::c_1::p_1'), null, '岗位删除后缓存释放');
+  assert.equal(store.getPreanalysisCache('ver_test_1::c_1::p_1'), null, '岗位删除后缓存释放');
   assert.equal(store.getPosition('c_1', 'p_1'), null);
 });
 
@@ -265,25 +265,25 @@ test('缓存：删除公司后该公司所有岗位的预分析缓存被释放',
     llm,
     store,
   });
-  assert.ok(store.getStrategyCache('ver_test_1::c_1::p_1'));
-  assert.ok(store.getStrategyCache('ver_b::c_1::p_2'));
+  assert.ok(store.getPreanalysisCache('ver_test_1::c_1::p_1'));
+  assert.ok(store.getPreanalysisCache('ver_b::c_1::p_2'));
 
   store.deleteCompany('c_1');
-  assert.equal(store.getStrategyCache('ver_test_1::c_1::p_1'), null);
-  assert.equal(store.getStrategyCache('ver_b::c_1::p_2'), null);
+  assert.equal(store.getPreanalysisCache('ver_test_1::c_1::p_1'), null);
+  assert.equal(store.getPreanalysisCache('ver_b::c_1::p_2'), null);
   assert.equal(store.listCompanyIds().includes('c_1'), false);
 });
 
 test('缓存键：格式与非法输入', () => {
   assert.equal(
-    strategyCacheKey({ resumeVersion: 'ver_x', companyId: 'c_1', positionId: 'p_1' }),
+    preanalysisCacheKey({ resumeVersion: 'ver_x', companyId: 'c_1', positionId: 'p_1' }),
     'ver_x::c_1::p_1',
   );
   assert.equal(
-    strategyCacheKey({ resumeVersion: { versionId: 'ver_x' }, companyId: 'c_1', positionId: 'p_1' }),
+    preanalysisCacheKey({ resumeVersion: { versionId: 'ver_x' }, companyId: 'c_1', positionId: 'p_1' }),
     'ver_x::c_1::p_1',
   );
-  assert.throws(() => strategyCacheKey({ resumeVersion: 'ver_x', companyId: '', positionId: 'p_1' }), /requires/);
+  assert.throws(() => preanalysisCacheKey({ resumeVersion: 'ver_x', companyId: '', positionId: 'p_1' }), /requires/);
 });
 
 test('chatJson：围栏 JSON 可解析，垃圾输出返回 null', async () => {
@@ -302,14 +302,14 @@ test('chatJson：围栏 JSON 可解析，垃圾输出返回 null', async () => {
   assert.equal(bad, null);
 });
 
-test('store：strategyCache 读写与更新时间', (t) => {
+test('store：preanalysisCache 读写与更新时间', (t) => {
   const store = tmpStore(t);
-  assert.equal(store.getStrategyCache('k'), null);
-  store.setStrategyCache('k', { plan: 1 });
-  assert.deepEqual(store.getStrategyCache('k'), { plan: 1 });
-  assert.equal(store.deleteStrategyCache('k'), true);
-  assert.equal(store.getStrategyCache('k'), null);
-  assert.equal(store.deleteStrategyCache('k'), false);
+  assert.equal(store.getPreanalysisCache('k'), null);
+  store.setPreanalysisCache('k', { plan: 1 });
+  assert.deepEqual(store.getPreanalysisCache('k'), { plan: 1 });
+  assert.equal(store.deletePreanalysisCache('k'), true);
+  assert.equal(store.getPreanalysisCache('k'), null);
+  assert.equal(store.deletePreanalysisCache('k'), false);
 });
 
 test('normalizePlan：缺失版本号补 1', () => {

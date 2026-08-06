@@ -39,10 +39,10 @@ function pickBaselineQuestion(chain, roundKey, roundContext) {
  * 生成 baseline plan（方案书 §5.4：计划是基线，不是脚本）。
  * 题目全部来自④层考察策略的追问链，每轮 ≥5 条。
  */
-export function buildBaselinePlan(strategyPlan, roundKey = 'round1', roundContext = null) {
-  const roundStrategy = strategyPlan?.layers?.roundStrategy?.[roundKey] ?? null;
+export function buildBaselinePlan(preanalysisPlan, roundKey = 'round1', roundContext = null) {
+  const roundStrategy = preanalysisPlan?.layers?.roundStrategy?.[roundKey] ?? null;
   const chains = Array.isArray(roundStrategy?.followupChains) ? roundStrategy.followupChains : [];
-  const meta = roundMetaFromPlan(strategyPlan, roundKey);
+  const meta = roundMetaFromPlan(preanalysisPlan, roundKey);
   if (!chains.length) {
     return { roundKey, items: [], source: 'none', positioning: meta };
   }
@@ -53,11 +53,11 @@ export function buildBaselinePlan(strategyPlan, roundKey = 'round1', roundContex
     depthTarget: c.depthTarget,
     question: pickBaselineQuestion(c, roundKey, roundContext),
   }));
-  return { roundKey, items, source: 'strategyPlan', positioning: meta };
+  return { roundKey, items, source: 'preanalysisPlan', positioning: meta };
 }
 
 // 创建面试会话（状态机：PLANNED → RUNNING → ADJUSTING → CLOSED）。
-// 预分析缺失时显式回退到规则模式（mode='rules-fallback'），不静默走旧路径。
+// 预分析缺失时显式回退到规则模式（mode='rules-fallback'），不静默降级。
 export function createSession({
   resumeProfile,
   jobProfile,
@@ -65,18 +65,18 @@ export function createSession({
   maxDepth = 3,
   llm = null,
   roundContext = null,
-  strategyPlan = null,
+  preanalysisPlan = null,
 } = {}) {
   if (!resumeProfile || !jobProfile) {
     throw new Error('resumeProfile and jobProfile required');
   }
-  const hasPlan = Boolean(strategyPlan?.layers?.roundStrategy?.[roundKey]?.followupChains?.length);
-  if (strategyPlan && !hasPlan) {
-    console.warn('[interviewer] invalid strategyPlan, explicit fallback to rules mode');
+  const hasPlan = Boolean(preanalysisPlan?.layers?.roundStrategy?.[roundKey]?.followupChains?.length);
+  if (preanalysisPlan && !hasPlan) {
+    console.warn('[interviewer] invalid preanalysisPlan, explicit fallback to rules mode');
   }
-  const mode = hasPlan ? 'strategy' : 'rules-fallback';
+  const mode = hasPlan ? 'preanalysis' : 'rules-fallback';
   const baselinePlan = hasPlan
-    ? buildBaselinePlan(strategyPlan, roundKey, roundContext)
+    ? buildBaselinePlan(preanalysisPlan, roundKey, roundContext)
     : { roundKey, items: [], source: 'none', positioning: null };
   return {
     sessionId: `iv_${crypto.randomBytes(6).toString('hex')}`,
@@ -85,7 +85,7 @@ export function createSession({
     resumeProfile,
     jobProfile,
     roundContext,
-    strategyPlan: hasPlan ? strategyPlan : null,
+    preanalysisPlan: hasPlan ? preanalysisPlan : null,
     baselinePlan,
     mode,
     baselineIndex: 0,
@@ -145,7 +145,7 @@ export async function nextQuestion(session, candidateAnswer) {
   let result = null;
   let decision = null;
 
-  if (session.mode === 'strategy') {
+  if (session.mode === 'preanalysis') {
     // 规则先决策（保证调整不过激、可测试），LLM 可用时负责措辞。
     decision = nextQuestionByRules(session, signals);
     if (session.llm && !decision.done) {
@@ -217,11 +217,6 @@ export async function nextQuestion(session, candidateAnswer) {
   const shouldClose = isLast || result.done === true;
   if (shouldClose) session.phase = 'closing';
   return { ...result, shouldClose };
-}
-
-// 兼容旧调用名：askFollowup === nextQuestion。
-export async function askFollowup(session, candidateAnswer) {
-  return nextQuestion(session, candidateAnswer);
 }
 
 // 正式收尾（shouldClose=true 后可调用）
