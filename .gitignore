@@ -3,9 +3,10 @@
 data/*
 !data/mock/
 
-# 仓库不放任何 markdown 文件（方案书等一律排除），README.md 除外
+# 仓库不放任何 markdown 文件（方案书等一律排除），README.md 与产品规划历程除外
 *.md
 !README.md
+!产品规划历程.md
 
 node_modules/
 .DS_Store
