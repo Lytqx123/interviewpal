@@ -3,8 +3,9 @@
 data/*
 !data/mock/
 
-# 笔试要求：仓库里不放任何 markdown 文件（README、方案书等一律排除）
+# 仓库不放任何 markdown 文件（方案书等一律排除），README.md 除外
 *.md
+!README.md
 
 node_modules/
 .DS_Store
