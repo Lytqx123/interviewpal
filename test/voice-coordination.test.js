@@ -108,10 +108,10 @@ test('System Prompt：包含人设/画像/策略/节奏，长度 ≤2000，轮�
   });
   assert.notEqual(p1, p2, '轮次不同 System Prompt 不同');
   assert.ok(p2.includes('二面业务面'));
-  // ④层跨轮去重清单 + ⑤层跨轮风险传递（§5.5：轮次提示词含跨轮去重；§5.4：⑤层跨轮风险传递）
+  // ④层跨轮去重清单 + ⑤层跨轮风险传递（轮次提示词含跨轮去重与跨轮风险传递）
   assert.ok(p2.includes('跨轮去重'), '二面 System Prompt 含跨轮去重清单');
   assert.ok(p2.includes('跨轮风险跟进'), '二面 System Prompt 含跨轮风险传递');
-  // 动态调整指令（§5.4：计划是基线不是脚本）
+  // 动态调整指令（计划是基线不是脚本）
   assert.ok(p2.includes('动态调整'), 'System Prompt 含动态调整指令');
 
   const positionB = { ...position, title: '产品经理', jobType: 'product' };

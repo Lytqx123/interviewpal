@@ -244,7 +244,7 @@ test('缓存：删除岗位后该岗位预分析缓存被释放', async (t) => {
   assert.equal(store.getPosition('c_1', 'p_1'), null);
 });
 
-test('§5.6 删除即释放：删除岗位时该岗位的复盘记录一并清理', async (t) => {
+test('删除即释放：删除岗位时该岗位的复盘记录一并清理', async (t) => {
   const store = tmpStore(t);
   const { companyId } = store.createCompany({ name: '星辰科技' });
   const { positionId } = store.createPosition(companyId, { title: '后端', jobType: 'tech' });

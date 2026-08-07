@@ -28,7 +28,7 @@ const COMMAND_PATTERNS = [
   { intent: 'salary', re: /薪资(?:建议|报告)?|谈薪|salary/i },
   { intent: 'export', re: /^\s*(?:请|帮我)?\s*(?:导出|export)\s*(?:报告|复盘)?\s*(text|markdown|md|html?|文本|PDF|pdf)?/i },
   { intent: 'refresh', re: /^\s*(?:请|帮我)?\s*(?:刷新|refresh)\s*(?:补全|缓存|联网)?/i },
-  // P1 §5.6 多公司并行管理：聚焦 / 归档 / 恢复
+  // P1 多公司并行管理：聚焦 / 归档 / 恢复
   { intent: 'focus', re: /^\s*(?:请|帮我)?\s*(?:聚焦|焦点|focus)\s*[:：]?\s*([\u4e00-\u9fa5A-Za-z0-9·]+)/i },
   { intent: 'archive', re: /^\s*(?:请|帮我)?\s*(?:归档|恢复|archive|restore)\s*[:：]?\s*([\u4e00-\u9fa5A-Za-z0-9·]+)/i },
   { intent: 'difficult', re: /^\s*(?:请|帮我)?\s*(?:困难题|难点题|高频题|题库|重练|difficult|question)/i },

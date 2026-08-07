@@ -68,7 +68,7 @@ test('JD 补全：入 round2 缓存，未绑定公司时跳过', async (t) => {
   assert.equal(skipped.skipped, true);
 });
 
-test('P1 §5.3 进阶：enrichCompanyBusiness 补全公司业务方向入 round2 缓存', async (t) => {
+test('P1 进阶：enrichCompanyBusiness 补全公司业务方向入 round2 缓存', async (t) => {
   const store = tmpStore(t);
   const company = store.createCompany({ name: '星辰科技' });
   const result = await enrichCompanyBusiness({
@@ -89,7 +89,7 @@ test('P1 §5.3 进阶：enrichCompanyBusiness 补全公司业务方向入 round2
   assert.equal(skipped.skipped, true);
 });
 
-test('P1 §5.3 进阶：refreshEnrich 跳过未过期条目、刷新过期条目（不产生重复）', async (t) => {
+test('P1 进阶：refreshEnrich 跳过未过期条目、刷新过期条目（不产生重复）', async (t) => {
   const store = tmpStore(t);
   const company = store.createCompany({ name: '星辰科技' });
   // 先写入一条 round2 缓存
@@ -129,7 +129,7 @@ test('P1 §5.3 进阶：refreshEnrich 跳过未过期条目、刷新过期条目
   assert.ok(new Date(after[0].expiresAt).getTime() > Date.now(), '刷新后 expiresAt 延后');
 });
 
-test('P1 §5.3 进阶：refreshEnrich 无缓存/无 search 时返回 0', async (t) => {
+test('P1 进阶：refreshEnrich 无缓存/无 search 时返回 0', async (t) => {
   const store = tmpStore(t);
   const company = store.createCompany({ name: '空公司' });
   const r1 = await refreshEnrich({ store, search: createSearchProvider(), companyId: company.companyId, roundKey: 'round2' });
@@ -138,4 +138,3 @@ test('P1 §5.3 进阶：refreshEnrich 无缓存/无 search 时返回 0', async (
   const r2 = await refreshEnrich({ store, search: null, companyId: company.companyId, roundKey: 'round2' });
   assert.equal(r2.refreshed, 0, '无 search 时 refreshed=0');
 });
-

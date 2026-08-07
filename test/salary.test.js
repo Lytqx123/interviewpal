@@ -1,4 +1,4 @@
-// 薪资建议报告测试（§5.10）：触发条件（至少一场）、未练轮次中等填充、
+// 薪资建议报告测试：触发条件（至少一场）、未练轮次中等填充、
 // 规则兜底、LLM 路径、联网、当前薪资涨幅、格式化。
 import test from 'node:test';
 import assert from 'node:assert/strict';

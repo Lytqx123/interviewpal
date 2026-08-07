@@ -302,7 +302,7 @@ export function nextFocusByRules(scores) {
 // 以下纯函数不依赖档案库，便于单测；由 memory.js 编排层串联。
 
 // 提取 session 中的面试官问题（供重复题对比与档案库存储）。
-// 同时提取每个问题对应的候选人回答（供 §5.7 防背答案式刷分检测）。
+// 同时提取每个问题对应的候选人回答（供防背答案式刷分检测）。
 export function extractSessionQuestions(session) {
   const turns = session.turns ?? [];
   const questions = [];
@@ -321,7 +321,7 @@ export function extractSessionQuestions(session) {
       turnNo: turns[i].turnNo ?? null,
       content: turns[i].content,
       focusArea: turns[i].focusArea ?? null,
-      answer, // §5.7 防背答案：保存回答供下次对比
+      answer, // 防背答案：保存回答供下次对比
     });
   }
   return questions;
@@ -358,7 +358,7 @@ export function compareRepeatedQuestions(currentQuestions, lastQuestions) {
 }
 
 /**
- * §5.7 防背答案式刷分：若分数提升但重复题的回答与上次高度雷同，教练提示。
+ * 防背答案式刷分：若分数提升但重复题的回答与上次高度雷同，教练提示。
  * 检测逻辑：重复题中，回答相似度 ≥0.7 且该维度分数提升 → 疑似背答案。
  * @param {object} repeatedResult compareRepeatedQuestions 的输出
  * @param {object} progress comparedWithLast.progress（{ dim: 'up'|'down'|'flat' }）

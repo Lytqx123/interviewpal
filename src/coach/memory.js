@@ -62,7 +62,7 @@ export async function reviewWithMemory(session, {
     reviewId: saved.reviewId,
   });
 
-  // P4：偏差报告回写预分析缓存（自学习闭环；失败仅告警，不影响复盘主流程）
+  // 自学习闭环：偏差报告回写预分析缓存（失败仅告警，不影响复盘主流程）
   if (result.planVsExecution) {
     try {
       const key =
@@ -83,12 +83,12 @@ export async function reviewWithMemory(session, {
   return { result, record: saved, report, lastReview };
 }
 
-// 跨场次对比增强：在六维升降基础上，叠加重复题对比 + 改进项完成率 + 防背答案检测（§5.7）。
+// 跨场次对比增强：在六维升降基础上，叠加重复题对比 + 改进项完成率 + 防背答案检测。
 function enrichComparison(result, session, lastReview) {
   const base = result.comparedWithLast ?? { progress: {}, summary: '首次面试，无对比' };
   const currentQuestions = extractSessionQuestions(session);
   const repeated = compareRepeatedQuestions(currentQuestions, lastReview.questions ?? []);
-  // §5.7 防背答案式刷分：分数提升 + 重复题回答高度雷同 → 教练提示
+  // 防背答案式刷分：分数提升 + 重复题回答高度雷同 → 教练提示
   const memorization = detectMemorizedAnswers(repeated, base.progress ?? {});
   return {
     ...base,

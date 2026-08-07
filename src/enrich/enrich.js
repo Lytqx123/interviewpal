@@ -1,10 +1,10 @@
 import { SEARCH_CACHE_TTL } from '../search/provider.js';
 
-// 联网补全（§5.3）：基础版 + P1 进阶版。
+// 联网补全：基础版 + P1 进阶版。
 //
 // 基础版：首次上传时把简历里的公司/技术、JD 里的公司/职责拿去检索，
 //   结果带"检索时间 + 来源 + 置信度"写入检索缓存。
-// P1 进阶版（§5.3）：补全目标公司真实 JD、岗位职责、业务方向；
+// P1 进阶版：补全目标公司真实 JD、岗位职责、业务方向；
 //   面试前一天刷新时效性信息（检测缓存是否过期，过期则重新检索）。
 //
 // 两条红线：
@@ -45,7 +45,7 @@ export async function enrichJd({ store, search, jobProfile, companyId, roundKey 
 }
 
 /**
- * P1 §5.3 进阶：补全目标公司真实业务方向。
+ * P1 进阶：补全目标公司真实业务方向。
  * 搜索公司业务方向、主营业务、最新动态——供二面业务面提问与点评引用。
  * 与基础版 enrichJd 互补：基础版搜职责实体，进阶版搜公司业务全貌。
  */
@@ -62,7 +62,7 @@ export async function enrichCompanyBusiness({ store, search, companyName, compan
 }
 
 /**
- * P1 §5.3 进阶：时效性刷新。
+ * P1 进阶：时效性刷新。
  * 检测缓存是否过期（expiresAt 已过），过期则重新检索并原地更新——面试前一天刷新时效性信息。
  * @param {object} store 档案库
  * @param {object} search 检索 provider
@@ -146,4 +146,3 @@ function buildQuery(entity) {
   if (entity.kind === 'news') return entity.name;
   return entity.name;
 }
-

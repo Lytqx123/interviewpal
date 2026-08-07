@@ -1,4 +1,4 @@
-// 双 Agent 编排（§5.8）：面试官失忆 / 教练全记忆。
+// 双 Agent 编排：面试官失忆 / 教练全记忆。
 // 真实 Gateway 模式下通过 OpenClaw 子代理（sessions_spawn 语义）承载两个 Agent；
 // mock 模式下回退到本地面试官/教练 Agent 工厂，保证无配对设备也可演示。
 

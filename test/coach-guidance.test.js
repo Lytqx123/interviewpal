@@ -108,7 +108,7 @@ describe('复盘教练 · 复盘报告导出', () => {
   });
 });
 
-describe('复盘教练 · 困难点报告（§5.9）', () => {
+describe('复盘教练 · 困难点报告', () => {
   it('buildDifficultyReport：四分类统计 + 逐条困难题 + 沉默期', () => {
     const markers = [
       { questionIndex: 1, category: 'noAnswer', question: 'Redis 持久化原理', answerSummary: '不知道', notes: '明确表示不会' },
@@ -211,7 +211,7 @@ describe('复盘教练 · 双 Agent 分工', () => {
   });
 });
 
-describe('复盘教练 · 防背答案式刷分（§5.7）', () => {
+describe('复盘教练 · 防背答案式刷分', () => {
   it('extractSessionQuestions：提取问题同时提取候选人回答', () => {
     const session = {
       turns: [
@@ -288,4 +288,3 @@ describe('复盘教练 · 防背答案式刷分（§5.7）', () => {
     assert.equal(result.suspected, false, '回答不同时不预警');
   });
 });
-

@@ -337,7 +337,7 @@ export class OpenClawGatewayClient {
   }
 
   /**
-   * 子代理承载双 Agent（§5.8）：以隔离子会话键承载面试官/复盘教练。
+   * 子代理承载双 Agent：以隔离子会话键承载面试官/复盘教练。
    * 与 OpenClaw sessions_spawn 语义一致——非阻塞、返回 runId + childSessionKey。
    */
   async spawnSubagent({ agentId = this.agentId, task, model = null, runTimeoutSeconds = null, idempotencyKey = null }) {

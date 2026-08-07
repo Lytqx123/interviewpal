@@ -12,7 +12,7 @@ import { analyzeRhythm, buildDifficultyReport } from '../coach/rhythm.js';
 import { ROUND_KEYS } from '../archive/constants.js';
 
 const MAX_SYSTEM_PROMPT_CHARS = 2000;
-const SILENCE_THRESHOLD_MS = 10000; // §5.9：沉默超时阈值 ≥10s
+const SILENCE_THRESHOLD_MS = 10000; // 困难点标注：沉默超时阈值 ≥10s
 
 function roundLabel(roundKey) {
   return roundKey === 'round1' ? '一面简历面' : roundKey === 'round2' ? '二面业务面' : '三面总监交叉面';
@@ -52,8 +52,8 @@ function compactJson(value, max = 400) {
 /**
  * 从预分析七大层生成浓缩 System Prompt（≤2K 字符）：
  * ③本轮人设 + ②候选人画像 + ①JD 要点 + ④本轮考察策略（含跨轮去重）+ ⑤风险预判（含跨轮风险传递）+ ⑦节奏体验。
- * 组装顺序遵循 §5.5：全局层（①②⑤）→ 轮次层（③④⑦）→ 当次数据（跨轮去重清单）。
- * ①-⑤层只源于简历+JD 推导，不含历次练习转写（面试官失忆，§5.7）。
+ * 组装顺序：全局层（①②⑤）→ 轮次层（③④⑦）→ 当次数据（跨轮去重清单）。
+ * ①-⑤层只源于简历+JD 推导，不含历次练习转写（面试官失忆原则）。
  */
 export function buildInterviewerSystemPrompt({ preanalysisPlan, roundKey, resumeProfile, jobProfile }) {
   const layers = preanalysisPlan?.layers;
@@ -94,7 +94,7 @@ export function buildInterviewerSystemPrompt({ preanalysisPlan, roundKey, resume
     // ④层跨轮去重清单（当次数据）：本轮不重复上轮已问的问题
     dedupList.length ? `跨轮去重：${dedupList.slice(0, 3).join('；')}` : '',
     rhythm ? `节奏与体验：${rhythm.curve}；时长与问题数：${rhythm.durationAndCount}` : '',
-    // 动态调整指令（§5.4：计划是基线不是脚本）
+    // 动态调整指令（计划是基线不是脚本）
     '动态调整：候选人展现意外深度→延伸追问到能力边界；暴露新弱点→临时插入追问；严重卡壳→降一档难度并调用救援策略；与简历矛盾→切换验证模式追问到底；主动引导到擅长领域→先展示再施压测上限。每条追问链最多降档1次，换线需2个信号叠加。',
     '要求：一次只问一个问题；先简短回应候选人再追问；回答卡壳时降一档难度，偏题时先拉回；口语自然，不书面化、不列要点。',
   ].filter(Boolean);
@@ -153,7 +153,7 @@ export async function createVoiceInterviewSession({
     roundContext,
     preanalysisPlan: plan,
   });
-  // P1 §5.9：语音时间戳追踪——用于表达节奏分析（语速/停顿/沉默）与困难点标记
+  // P1：语音时间戳追踪——用于表达节奏分析（语速/停顿/沉默）与困难点标记
   session.voiceMeta = {
     asrEvents: [], // { text, arrivedAt, charCount }
     chatEvents: [], // { content, arrivedAt }
@@ -197,9 +197,9 @@ export async function handleAsrText(session, text) {
   const now = Date.now();
   const meta = session.voiceMeta;
   if (meta) {
-    // P1 §5.9：记录 ASR 到达时间戳，用于表达节奏分析
+    // P1：记录 ASR 到达时间戳，用于表达节奏分析
     meta.asrEvents.push({ text, arrivedAt: now, charCount: text.length });
-    // P1 §5.9：沉默检测——若距上次面试官发言 >10s，记录沉默期
+    // P1：沉默检测——若距上次面试官发言 >10s，记录沉默期
     if (meta.lastChatAt && now - meta.lastChatAt > SILENCE_THRESHOLD_MS) {
       meta.silencePeriods.push({
         from: meta.lastChatAt,
@@ -210,7 +210,7 @@ export async function handleAsrText(session, text) {
   }
   const result = await nextQuestion(session, text);
   if (!result) return null;
-  // P1 §5.9：困难点当场标注——基于实时信号判定四分类
+  // P1：困难点当场标注——基于实时信号判定四分类
   if (meta) {
     const marker = detectDifficultyMarker(session, text, result);
     if (marker) meta.difficultyMarkers.push(marker);
@@ -221,7 +221,7 @@ export async function handleAsrText(session, text) {
 }
 
 /**
- * P1 §5.9：困难点四分类当场标注。
+ * P1：困难点四分类当场标注。
  * 基于候选人回答文本 + 本轮信号判定，附在 session.voiceMeta.difficultyMarkers。
  * 分类：noAnswer（未回答上来）/ offTopic（答偏跑题）/ silence（沉默超时）/ shallow（回答浅薄）
  */
@@ -323,7 +323,7 @@ export function collectChatResponse(session, text) {
     turnNo: session.turns.length + 1,
     askedAt: now,
   });
-  // P1 §5.9：记录面试官发言时间戳，用于沉默检测与节奏分析
+  // P1：记录面试官发言时间戳，用于沉默检测与节奏分析
   const meta = session.voiceMeta;
   if (meta) {
     meta.chatEvents.push({ content: text, arrivedAt: now });
@@ -344,12 +344,12 @@ export async function finishVoiceSession({
   resumeVersionId = null,
 }) {
   await closeInterview(session);
-  // P1 §5.9：通话结束后生成表达节奏分析 + 困难点报告，附入 session 供复盘教练消费
+  // P1：通话结束后生成表达节奏分析 + 困难点报告，附入 session 供复盘教练消费
   const meta = session.voiceMeta;
   if (meta) {
     session.rhythmAnalysis = analyzeRhythm(session);
     session.difficultyReport = buildDifficultyReport(meta.difficultyMarkers, meta.silencePeriods);
-    // 困难点报告写入 session 供复盘教练的 difficultQuestions 消费（§5.9 闭环）
+    // 困难点报告写入 session 供复盘教练的 difficultQuestions 消费（困难点沉淀闭环）
     if (meta.difficultyMarkers.length && !session.difficultQuestions) {
       session.difficultQuestions = meta.difficultyMarkers.map((m) => ({
         category: m.category,

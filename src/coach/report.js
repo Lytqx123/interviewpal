@@ -83,7 +83,7 @@ export function formatReport(reviewResult, { session } = {}) {
     if (ic && ic.total > 0) {
       lines.push(`  改进项完成率：上次改进项 ${ic.total} 项，本次完成 ${ic.completed} 项（${Math.round(ic.rate * 100)}%）`);
     }
-    // §5.7 防背答案式刷分预警
+    // 防背答案式刷分预警
     const mw = comparedWithLast.memorizationWarning;
     if (mw?.suspected) {
       lines.push('  ⚠️ 防背答案预警：');
@@ -92,7 +92,7 @@ export function formatReport(reviewResult, { session } = {}) {
     lines.push('');
   }
 
-  // 预计 vs 实际（P4：预分析 baseline 与实际执行偏差）
+  // 预计 vs 实际（预分析 baseline 与实际执行偏差）
   const pve = reviewResult.planVsExecution;
   if (pve) {
     lines.push('【预计 vs 实际】');
@@ -118,7 +118,7 @@ export function formatReport(reviewResult, { session } = {}) {
     lines.push('');
   }
 
-  // P1 §5.9：表达节奏分析（语音面试专属，有 voiceMeta 时产出）
+  // P1：表达节奏分析（语音面试专属，有 voiceMeta 时产出）
   const rhythm = session?.rhythmAnalysis;
   if (rhythm && rhythm.answerCount > 0) {
     lines.push('【表达节奏分析】');
@@ -143,7 +143,7 @@ export function formatReport(reviewResult, { session } = {}) {
     lines.push('');
   }
 
-  // P1 §5.9：困难点报告（通话中当场标注，教练沉淀对比）
+  // P1：困难点报告（通话中当场标注，教练沉淀对比）
   const dr = session?.difficultyReport;
   if (dr && dr.total > 0) {
     lines.push('【困难点报告】');

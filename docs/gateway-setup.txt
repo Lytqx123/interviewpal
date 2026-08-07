@@ -1,4 +1,4 @@
-InterviewPal · OpenClaw Gateway 接入配置清单（P5）
+InterviewPal · OpenClaw Gateway 接入配置清单
 ====================================================
 
 目标
@@ -49,7 +49,7 @@ npm run gateway
 - 断网时消息进入 data/gateway-outbox.json 排队（最多 50 条、48 小时有效），
   重连后按顺序补发；最近会话与复盘报告写入 data/gateway-cache.json。
 
-网络兜底（方案书 §4.5）
+网络兜底
 ----------------------
 - 局域网直连：App 填主机局域网 IP（默认 18789）；
 - Tailscale：App 填 Tailscale MagicDNS 名（wss:// 或 http:// 视配置）；

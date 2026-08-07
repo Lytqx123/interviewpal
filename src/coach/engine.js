@@ -39,7 +39,7 @@ export async function reviewInterview(session, { lastReview = null, llm = null }
   if (lastReview?.scores) {
     result.comparedWithLast = compareWithLast(result.scores, lastReview.scores);
   }
-  // P4：预计 vs 实际 偏差对比（仅预分析模式有 baseline/执行轨迹时产出）
+  // 预计 vs 实际 偏差对比（仅预分析模式有 baseline/执行轨迹时产出）
   result.planVsExecution = diffPlanVsExecution({
     baselinePlan: session?.baselinePlan,
     plan: session?.preanalysisPlan,
@@ -54,7 +54,7 @@ export async function reviewInterview(session, { lastReview = null, llm = null }
 // 规则兜底：完整复盘结果
 function reviewByRules(session) {
   const { scores, scoreEvidence } = scoreByRules(session);
-  // P1 §5.9：语音路径已当场标注困难点（session.difficultyMarkers→session.difficultQuestions），
+  // P1：语音路径已当场标注困难点（session.difficultyMarkers→session.difficultQuestions），
   // 与规则兜底合并去重（按 questionIndex + category），优先保留语音侧的当场标注
   const voiceDifficult = Array.isArray(session?.difficultQuestions) ? session.difficultQuestions : [];
   const ruleDifficult = difficultQuestionsByRules(session);

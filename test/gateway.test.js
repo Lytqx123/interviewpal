@@ -425,7 +425,7 @@ test('P1 命令路由：刷新联网补全经 router 分发（无 search 时提�
   assert.match(r.reply, /检索服务未启用/);
 });
 
-test('P1 命令路由：聚焦公司 / 归档 / 恢复（§5.6 多公司并行管理）', async (t) => {
+test('P1 命令路由：聚焦公司 / 归档 / 恢复（多公司并行管理）', async (t) => {
   const dir = tmpDir(t);
   const store = new ArchiveStore(dir);
   store.createCompany({ name: '星辰科技' });
@@ -478,7 +478,7 @@ test('P1 命令路由：状态显示焦点公司与归档计数', async (t) => {
 });
 
 
-test('离线发件箱：入队 → 真实网关补发 → 清空（§4.5 离线兜底）', async (t) => {
+test('离线发件箱：入队 → 真实网关补发 → 清空（离线兜底）', async (t) => {
   const dir = tmpDir(t);
   const server = await createMockGatewayServer();
   t.after(() => server.close());

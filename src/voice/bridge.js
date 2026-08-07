@@ -367,7 +367,7 @@ function handleUpgrade(req, socket, head, cfg, wss, ctx) {
                 : '';
               if (text) {
                 // 动态调整闭环：ASR 文本回写本地协调层，若返回显著调整注入指引，
-                // 则向上游发送 ChatRAGText(502) 帧引导面试官下一轮回应方向（§5.4）。
+                // 则向上游发送 ChatRAGText(502) 帧引导面试官下一轮回应方向（动态调整闭环）。
                 Promise.resolve(ctx.coordination.handleAsr(frame.sessionId, text))
                   .then((res) => {
                     if (!res?.injection) return;

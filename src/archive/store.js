@@ -294,7 +294,7 @@ export class ArchiveStore {
     return this.readJson(path.join(this.companyDir(companyId), 'positions', `${positionId}.json`), null);
   }
 
-  // 删除岗位：岗位文件移除 + 该岗位的预分析缓存 + 该岗位的复盘记录联动释放（§5.6 删除即释放）。
+  // 删除岗位：岗位文件移除 + 该岗位的预分析缓存 + 该岗位的复盘记录联动释放（删除即释放）。
   deletePosition(companyId, positionId) {
     this.assertCompanyId(companyId);
     this.assertPositionId(positionId);
@@ -305,12 +305,12 @@ export class ArchiveStore {
       if (err.code !== 'ENOENT') throw err;
     }
     this.deletePreanalysisCacheByPosition(companyId, positionId);
-    // §5.6：该岗位的复盘记录也一并释放，不残留孤儿数据
+    // 删除即释放：该岗位的复盘记录也一并清理，不残留孤儿数据
     this.deleteReviewsByPosition(companyId, positionId);
     return true;
   }
 
-  // 删除某岗位的所有复盘记录（§5.6 删除即释放：删除岗位时联动清理）
+  // 删除某岗位的所有复盘记录（删除即释放：删除岗位时联动清理）
   deleteReviewsByPosition(companyId, positionId) {
     const reviews = this.listReviews({ companyId, positionId });
     for (const r of reviews) {
@@ -478,7 +478,7 @@ export class ArchiveStore {
     return before - cache.entries.length;
   }
 
-  // P1 §5.3：更新单条检索缓存（时效性刷新——原地更新 source/summary/confidence/时间戳，不产生重复条目）
+  // P1：更新单条检索缓存（时效性刷新——原地更新 source/summary/confidence/时间戳，不产生重复条目）
   updateCacheEntry(companyId, roundKey, entryId, patch = {}) {
     const cache = this.getCache(companyId, roundKey);
     if (!cache) return null;

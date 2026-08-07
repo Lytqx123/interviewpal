@@ -66,7 +66,7 @@ function buildFrontierQuery({ jobType, title, responsibilities }) {
 
 // 触发二面联网补全进阶：补全时顺带把前沿话题写入二面缓存。
 // 与 prepareRound2Context 分离：补全是写缓存（副作用），准备是读缓存（纯读）。
-// P1 §5.3：同时补全目标公司真实业务方向（主营/产品线/最新动态）。
+// P1：同时补全目标公司真实业务方向（主营/产品线/最新动态）。
 export async function enrichRound2Frontier({ store, search, jobProfile, companyId }) {
   const base = enrichJd({ store, search, jobProfile, companyId, roundKey: 'round2' });
   const business = jobProfile?.companyName

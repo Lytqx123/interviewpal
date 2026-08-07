@@ -412,7 +412,7 @@ export function handleExportCommand({ store, text }) {
   };
 }
 
-// P1 §5.3：刷新联网补全缓存（面试前一天刷新时效性信息）。
+// P1：刷新联网补全缓存（面试前一天刷新时效性信息）。
 export async function handleRefreshCommand({ store, search, text }) {
   if (!search) {
     return { intent: 'refresh', reply: '检索服务未启用，无法刷新联网补全。', data: null };
@@ -438,7 +438,7 @@ export async function handleRefreshCommand({ store, search, text }) {
   };
 }
 
-// P1 §5.6：聚焦公司——设置本周重点准备的公司，每日练习推送与信息刷新围绕焦点公司进行。
+// P1：聚焦公司——设置本周重点准备的公司，每日练习推送与信息刷新围绕焦点公司进行。
 // 焦点同时只有一家，设置时自动取消其它公司的焦点。
 export function handleFocusCommand({ store, text }) {
   const company = resolveCompany(store, text);
@@ -451,7 +451,7 @@ export function handleFocusCommand({ store, text }) {
 }
 
 /**
- * P1 §5.6：归档 / 恢复公司——活跃/归档状态管理。
+ * P1：归档 / 恢复公司——活跃/归档状态管理。
  * 命令含「恢复」时取消归档；含「归档」时置为归档。归档公司在列表与练习入口中隐藏，可回溯。
  * resolveCompany 已支持按名字匹配归档公司，故恢复归档公司也能命中。
  */

@@ -1,4 +1,4 @@
-// OpenClaw Gateway 适配层出口（§4.5/§4.6）
+// OpenClaw Gateway 适配层出口
 export { OpenClawGatewayClient, GatewayError } from './client.js';
 export { startGatewayBootstrap, readGatewayConfig } from './bootstrap.js';
 export { createCommandRouter, detectIntent } from './router.js';
