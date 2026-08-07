@@ -54,11 +54,24 @@ export async function reviewInterview(session, { lastReview = null, llm = null }
 // 规则兜底：完整复盘结果
 function reviewByRules(session) {
   const { scores, scoreEvidence } = scoreByRules(session);
+  // P1 §5.9：语音路径已当场标注困难点（session.difficultyMarkers→session.difficultQuestions），
+  // 与规则兜底合并去重（按 questionIndex + category），优先保留语音侧的当场标注
+  const voiceDifficult = Array.isArray(session?.difficultQuestions) ? session.difficultQuestions : [];
+  const ruleDifficult = difficultQuestionsByRules(session);
+  const seen = new Set(voiceDifficult.map((q) => `${q.questionIndex ?? ''}:${q.category}`));
+  const merged = [...voiceDifficult];
+  for (const q of ruleDifficult) {
+    const key = `${q.questionIndex ?? ''}:${q.category}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(q);
+    }
+  }
   return {
     scores,
     scoreEvidence,
     directionDeviation: directionDeviationByRules(session),
-    difficultQuestions: difficultQuestionsByRules(session),
+    difficultQuestions: merged,
     perQuestionReview: perQuestionReviewByRules(session),
     improvementList: improvementByRules(scores),
     comparedWithLast: null,

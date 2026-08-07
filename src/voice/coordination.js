@@ -8,9 +8,11 @@ import { generatePlan } from '../preanalysis/engine.js';
 import { createSession, startInterview, nextQuestion, closeInterview, getSessionSummary } from '../interviewer/index.js';
 import { prepareRound2Context } from '../interviewer/rounds.js';
 import { reviewWithMemory } from '../coach/memory.js';
+import { analyzeRhythm, buildDifficultyReport } from '../coach/rhythm.js';
 import { ROUND_KEYS } from '../archive/constants.js';
 
 const MAX_SYSTEM_PROMPT_CHARS = 2000;
+const SILENCE_THRESHOLD_MS = 10000; // §5.9：沉默超时阈值 ≥10s
 
 function roundLabel(roundKey) {
   return roundKey === 'round1' ? '一面简历面' : roundKey === 'round2' ? '二面业务面' : '三面总监交叉面';
@@ -151,6 +153,14 @@ export async function createVoiceInterviewSession({
     roundContext,
     preanalysisPlan: plan,
   });
+  // P1 §5.9：语音时间戳追踪——用于表达节奏分析（语速/停顿/沉默）与困难点标记
+  session.voiceMeta = {
+    asrEvents: [], // { text, arrivedAt, charCount }
+    chatEvents: [], // { content, arrivedAt }
+    silencePeriods: [], // { from, to, durationMs }
+    difficultyMarkers: [], // { questionIndex, category, question, answerSummary, notes }
+    lastChatAt: null, // 上次面试官发言时间（用于计算沉默时长）
+  };
   await startInterview(session);
 
   const systemPrompt = buildInterviewerSystemPrompt({
@@ -184,11 +194,65 @@ export async function createVoiceInterviewSession({
 /** ASR 文本回写：作为候选人回答喂给面试官 session（信号提取 + 动态决策），返回下一问题与注入决策。 */
 export async function handleAsrText(session, text) {
   if (!session || session.state === 'closed' || typeof text !== 'string' || !text.trim()) return null;
+  const now = Date.now();
+  const meta = session.voiceMeta;
+  if (meta) {
+    // P1 §5.9：记录 ASR 到达时间戳，用于表达节奏分析
+    meta.asrEvents.push({ text, arrivedAt: now, charCount: text.length });
+    // P1 §5.9：沉默检测——若距上次面试官发言 >10s，记录沉默期
+    if (meta.lastChatAt && now - meta.lastChatAt > SILENCE_THRESHOLD_MS) {
+      meta.silencePeriods.push({
+        from: meta.lastChatAt,
+        to: now,
+        durationMs: now - meta.lastChatAt,
+      });
+    }
+  }
   const result = await nextQuestion(session, text);
   if (!result) return null;
+  // P1 §5.9：困难点当场标注——基于实时信号判定四分类
+  if (meta) {
+    const marker = detectDifficultyMarker(session, text, result);
+    if (marker) meta.difficultyMarkers.push(marker);
+  }
   // 构建动态调整注入决策（仅在显著调整时注入，避免过度干预自然对话）
   const injection = buildAdjustmentInjection(result, session);
   return { ...result, injection };
+}
+
+/**
+ * P1 §5.9：困难点四分类当场标注。
+ * 基于候选人回答文本 + 本轮信号判定，附在 session.voiceMeta.difficultyMarkers。
+ * 分类：noAnswer（未回答上来）/ offTopic（答偏跑题）/ silence（沉默超时）/ shallow（回答浅薄）
+ */
+function detectDifficultyMarker(session, text, result) {
+  const lastSignal = session.signals?.[session.signals.length - 1]?.signals ?? null;
+  const lastInterviewerTurn = [...session.turns].reverse().find((t) => t.role === 'interviewer');
+  const question = lastInterviewerTurn?.content ?? '';
+  const questionIndex = session.turns.filter((t) => t.role === 'interviewer').length;
+
+  // 1. 未回答上来：明确表示不会 / 极短回答
+  const noAnswerPatterns = /^(不知道|不会|没想过|不了解|不清楚|说不出来|答不上)/;
+  if (noAnswerPatterns.test(text.trim()) || text.trim().length < 4) {
+    return { questionIndex, category: 'noAnswer', question, answerSummary: text.slice(0, 80), notes: '候选人明确表示不会或回答极短' };
+  }
+  // 2. 答偏跑题：信号 direction=off_topic
+  if (lastSignal?.direction === 'off_topic') {
+    return { questionIndex, category: 'offTopic', question, answerSummary: text.slice(0, 80), notes: '回答偏离问题核心' };
+  }
+  // 3. 沉默超时：沉默期已记录（>10s）
+  const meta = session.voiceMeta;
+  if (meta?.silencePeriods?.length) {
+    const lastSilence = meta.silencePeriods[meta.silencePeriods.length - 1];
+    if (lastSilence && lastSilence.to > (meta.asrEvents[meta.asrEvents.length - 2]?.arrivedAt ?? 0)) {
+      return { questionIndex, category: 'silence', question, answerSummary: text.slice(0, 80), notes: `沉默 ${Math.round(lastSilence.durationMs / 1000)}s 后才回答` };
+    }
+  }
+  // 4. 回答浅薄：信号 depth=shallow
+  if (lastSignal?.depth === 'shallow') {
+    return { questionIndex, category: 'shallow', question, answerSummary: text.slice(0, 80), notes: '回答缺乏细节、泛泛而谈' };
+  }
+  return null;
 }
 
 /**
@@ -248,6 +312,7 @@ export function collectChatResponse(session, text) {
   if (!session || typeof text !== 'string' || !text.trim()) return null;
   const last = session.turns[session.turns.length - 1];
   if (last?.role === 'interviewer' && last.content === text) return null;
+  const now = Date.now();
   session.turns.push({
     role: 'interviewer',
     content: text,
@@ -256,8 +321,14 @@ export function collectChatResponse(session, text) {
     mainlineId: session.currentMainlineId ?? null,
     adjustment: null,
     turnNo: session.turns.length + 1,
-    askedAt: Date.now(),
+    askedAt: now,
   });
+  // P1 §5.9：记录面试官发言时间戳，用于沉默检测与节奏分析
+  const meta = session.voiceMeta;
+  if (meta) {
+    meta.chatEvents.push({ content: text, arrivedAt: now });
+    meta.lastChatAt = now;
+  }
   return text;
 }
 
@@ -273,6 +344,21 @@ export async function finishVoiceSession({
   resumeVersionId = null,
 }) {
   await closeInterview(session);
+  // P1 §5.9：通话结束后生成表达节奏分析 + 困难点报告，附入 session 供复盘教练消费
+  const meta = session.voiceMeta;
+  if (meta) {
+    session.rhythmAnalysis = analyzeRhythm(session);
+    session.difficultyReport = buildDifficultyReport(meta.difficultyMarkers, meta.silencePeriods);
+    // 困难点报告写入 session 供复盘教练的 difficultQuestions 消费（§5.9 闭环）
+    if (meta.difficultyMarkers.length && !session.difficultQuestions) {
+      session.difficultQuestions = meta.difficultyMarkers.map((m) => ({
+        category: m.category,
+        question: m.question,
+        answerSummary: m.answerSummary,
+        notes: m.notes,
+      }));
+    }
+  }
   const review = await reviewWithMemory(session, {
     store,
     companyId,
@@ -282,7 +368,7 @@ export async function finishVoiceSession({
     reply,
     resumeVersionId,
   });
-  return { review, summary: getSessionSummary(session) };
+  return { review, summary: getSessionSummary(session), rhythm: session.rhythmAnalysis ?? null, difficultyReport: session.difficultyReport ?? null };
 }
 
 /**

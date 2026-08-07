@@ -4,10 +4,14 @@
 
 import {
   handleApplyCommand,
+  handleArchiveCommand,
   handleDifficultCommand,
+  handleExportCommand,
+  handleFocusCommand,
   handleHelpCommand,
   handleOutboxCommand,
   handlePasteJdCommand,
+  handleRefreshCommand,
   handleReviewCommand,
   handleSalaryCommand,
   handleStartRoundCommand,
@@ -22,6 +26,11 @@ const COMMAND_PATTERNS = [
   { intent: 'start_round', re: /^\s*(?:请|帮我)?\s*(?:在\s*)?[\u4e00-\u9fa5A-Za-z0-9·]{1,20}?(?:公司|科技|集团|银行|网络|信息|技术|软件|有限)?\s*(?:开始|进入|进行|练|约)?\s*(?:第?[一二三1-3]面|一面|二面|三面|面试|语音面试|talk)/ },
   { intent: 'review', re: /^\s*(?:请|帮我)?\s*(?:复盘|复盘报告|看下复盘|报告|review)/i },
   { intent: 'salary', re: /薪资(?:建议|报告)?|谈薪|salary/i },
+  { intent: 'export', re: /^\s*(?:请|帮我)?\s*(?:导出|export)\s*(?:报告|复盘)?\s*(text|markdown|md|html?|文本|PDF|pdf)?/i },
+  { intent: 'refresh', re: /^\s*(?:请|帮我)?\s*(?:刷新|refresh)\s*(?:补全|缓存|联网)?/i },
+  // P1 §5.6 多公司并行管理：聚焦 / 归档 / 恢复
+  { intent: 'focus', re: /^\s*(?:请|帮我)?\s*(?:聚焦|焦点|focus)\s*[:：]?\s*([\u4e00-\u9fa5A-Za-z0-9·]+)/i },
+  { intent: 'archive', re: /^\s*(?:请|帮我)?\s*(?:归档|恢复|archive|restore)\s*[:：]?\s*([\u4e00-\u9fa5A-Za-z0-9·]+)/i },
   { intent: 'difficult', re: /^\s*(?:请|帮我)?\s*(?:困难题|难点题|高频题|题库|重练|difficult|question)/i },
   { intent: 'outbox', re: /^\s*(?:离线|发件箱|outbox)/i },
   { intent: 'status', re: /^\s*(?:状态|档案|概览|status)/i },
@@ -87,6 +96,14 @@ export function createCommandRouter({ store, llm = null, search = null, coordina
         return handleSalaryCommand(deps);
       case 'difficult':
         return handleDifficultCommand(deps);
+      case 'export':
+        return handleExportCommand(deps);
+      case 'refresh':
+        return handleRefreshCommand(deps);
+      case 'focus':
+        return handleFocusCommand(deps);
+      case 'archive':
+        return handleArchiveCommand(deps);
       case 'outbox':
         return handleOutboxCommand(deps);
       case 'status':

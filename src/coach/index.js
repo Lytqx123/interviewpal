@@ -5,7 +5,7 @@ export { formatReport } from './report.js';
 export { buildReviewPrompt } from './prompts.js';
 export { reviewWithMemory } from './memory.js';
 // P1 扩展
-export { analyzeRhythm } from './rhythm.js';
+export { analyzeRhythm, buildDifficultyReport } from './rhythm.js';
 export { getQuestions, recommendByWeakness } from './questionBank.js';
 export { exportReview } from './export.js';
 export { createInterviewerAgent, createCoachAgent } from './agents.js';

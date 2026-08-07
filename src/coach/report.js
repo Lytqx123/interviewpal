@@ -112,6 +112,45 @@ export function formatReport(reviewResult, { session } = {}) {
     lines.push('');
   }
 
+  // P1 §5.9：表达节奏分析（语音面试专属，有 voiceMeta 时产出）
+  const rhythm = session?.rhythmAnalysis;
+  if (rhythm && rhythm.answerCount > 0) {
+    lines.push('【表达节奏分析】');
+    lines.push(`  回答 ${rhythm.answerCount} 次，平均 ${rhythm.avgLength} 字（${rhythm.minLength}-${rhythm.maxLength}），波动 ${rhythm.stdDev}`);
+    lines.push(`  填充词 ${rhythm.totalFillers} 个（每百字 ${rhythm.fillerRate}），过短回答占比 ${Math.round(rhythm.shortAnswerRatio * 100)}%`);
+    lines.push(`  节奏评估：${rhythm.pacing.assessment}`);
+    if (rhythm.pacing.issues?.length) {
+      for (const issue of rhythm.pacing.issues) lines.push(`    · ${issue}`);
+    }
+    // 进阶版时间戳维度
+    if (rhythm.timestampBased) {
+      const tb = rhythm.timestampBased;
+      lines.push(`  语速：${tb.speakingRate} 字/分钟`);
+      lines.push(`  思考停顿：平均 ${tb.avgPauseSec}s / 最长 ${tb.maxPauseSec}s`);
+      if (tb.silenceCount > 0) {
+        lines.push(`  沉默超时：${tb.silenceCount} 次，累计 ${tb.totalSilenceSec}s`);
+      }
+      if (tb.issues?.length) {
+        for (const issue of tb.issues) lines.push(`    · ${issue}`);
+      }
+    }
+    lines.push('');
+  }
+
+  // P1 §5.9：困难点报告（通话中当场标注，教练沉淀对比）
+  const dr = session?.difficultyReport;
+  if (dr && dr.total > 0) {
+    lines.push('【困难点报告】');
+    lines.push(`  ${dr.summary}`);
+    const catLabel = { noAnswer: '未回答', offTopic: '答偏跑题', silence: '沉默超时', shallow: '回答浅薄' };
+    for (const q of dr.questions) {
+      const label = catLabel[q.category] ?? q.category;
+      lines.push(`  · [${label}] ${(q.question ?? '').slice(0, 50)}`);
+      if (q.notes) lines.push(`    ${q.notes}`);
+    }
+    lines.push('');
+  }
+
   // 下次重点
   if (nextFocus?.length) {
     lines.push('【下次重点】');

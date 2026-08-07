@@ -4,7 +4,7 @@
 //
 // 本模块负责在二面开始前，从档案库取出岗位职责 + 公司业务缓存，并联网拉前沿话题，
 // 组装成 roundContext 供面试官策略池引用。无 search/无缓存时优雅降级（规则兜底）。
-import { enrichJd } from '../enrich/enrich.js';
+import { enrichJd, enrichCompanyBusiness } from '../enrich/enrich.js';
 
 // 从预分析作战地图⑦层读取轮次差异化策略（二面业务面 / 三面总监交叉面），
 // 取代硬编码；预分析缺失时由 rules.js 的职位类型策略池兜底。
@@ -66,6 +66,12 @@ function buildFrontierQuery({ jobType, title, responsibilities }) {
 
 // 触发二面联网补全进阶：补全时顺带把前沿话题写入二面缓存。
 // 与 prepareRound2Context 分离：补全是写缓存（副作用），准备是读缓存（纯读）。
+// P1 §5.3：同时补全目标公司真实业务方向（主营/产品线/最新动态）。
 export async function enrichRound2Frontier({ store, search, jobProfile, companyId }) {
-  return enrichJd({ store, search, jobProfile, companyId, roundKey: 'round2' });
+  const base = enrichJd({ store, search, jobProfile, companyId, roundKey: 'round2' });
+  const business = jobProfile?.companyName
+    ? enrichCompanyBusiness({ store, search, companyName: jobProfile.companyName, companyId, roundKey: 'round2' })
+    : Promise.resolve({ skipped: true });
+  const [baseResult, businessResult] = await Promise.all([base, business]);
+  return { ...baseResult, business: businessResult };
 }

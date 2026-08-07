@@ -463,6 +463,24 @@ export class ArchiveStore {
     return before - cache.entries.length;
   }
 
+  // P1 §5.3：更新单条检索缓存（时效性刷新——原地更新 source/summary/confidence/时间戳，不产生重复条目）
+  updateCacheEntry(companyId, roundKey, entryId, patch = {}) {
+    const cache = this.getCache(companyId, roundKey);
+    if (!cache) return null;
+    const entry = cache.entries.find((e) => e.id === entryId);
+    if (!entry) return null;
+    const ttl = patch.ttl ?? CACHE_TTL_MS.volatile;
+    const now = Date.now();
+    if (patch.source !== undefined) entry.source = patch.source;
+    if (patch.summary !== undefined) entry.summary = patch.summary;
+    if (patch.confidence !== undefined) entry.confidence = patch.confidence;
+    if (patch.verified !== undefined) entry.verified = Boolean(patch.verified);
+    entry.retrievedAt = new Date(now).toISOString();
+    entry.expiresAt = new Date(now + ttl).toISOString();
+    this.saveJson(path.join(this.companyDir(companyId), 'cache', `${roundKey}.json`), cache);
+    return entry;
+  }
+
   clearCache(companyId, roundKey) {
     const file = path.join(this.companyDir(companyId), 'cache', `${roundKey}.json`);
     try {

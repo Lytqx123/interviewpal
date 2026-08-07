@@ -372,6 +372,112 @@ test('命令路由：薪资建议解析当前薪资（20万 / 当前20万 / 无�
   assert.match(r3.reply, /未练/);
 });
 
+test('P1 命令路由：导出报告（text/markdown/html）经 router 分发到 handler', async (t) => {
+  const dir = tmpDir(t);
+  const store = new ArchiveStore(dir);
+  const { companyId } = store.createCompany({ name: '星辰科技' });
+  const { positionId } = store.createPosition(companyId, { title: '高级后端工程师', jobType: 'tech' });
+  store.saveReview({
+    reviewId: 'rv-export-1', companyId, positionId, roundKey: 'round1',
+    scores: { logic: 4, relevance: 3, depth: 4, fluency: 4, interaction: 3, confidence: 4 },
+    improvementList: [{ dimension: 'relevance', priority: 'medium', suggestion: '更切题' }],
+    createdAt: '2026-08-01T10:00:00Z',
+  });
+  const router = createCommandRouter({ store, log: silent });
+
+  // 关键：验证 dispatch 不再 fall through 到 unknown
+  const text = await router.route('导出');
+  assert.equal(text.ok, true);
+  assert.equal(text.intent, 'export', '「导出」应路由到 export 而非 unknown');
+  assert.match(text.reply, /复盘报告已导出/);
+  assert.equal(text.data.format, 'text');
+
+  const md = await router.route('导出 markdown');
+  assert.equal(md.intent, 'export');
+  assert.equal(md.data.format, 'markdown');
+  assert.ok(md.data.content.includes('# 面试复盘'), 'markdown 内容含标题');
+
+  const html = await router.route('导出 html');
+  assert.equal(html.intent, 'export');
+  assert.equal(html.data.format, 'html');
+  assert.ok(html.data.content.includes('<!DOCTYPE html>'), 'html 内容含 DOCTYPE');
+});
+
+test('P1 命令路由：无复盘时导出给出友好提示', async (t) => {
+  const dir = tmpDir(t);
+  const store = new ArchiveStore(dir);
+  const router = createCommandRouter({ store, log: silent });
+  const r = await router.route('导出 html');
+  assert.equal(r.ok, true);
+  assert.equal(r.intent, 'export');
+  assert.match(r.reply, /还没有复盘记录/);
+  assert.equal(r.data, null);
+});
+
+test('P1 命令路由：刷新联网补全经 router 分发（无 search 时提示未启用）', async (t) => {
+  const dir = tmpDir(t);
+  const store = new ArchiveStore(dir);
+  store.createCompany({ name: '星辰科技' });
+  const router = createCommandRouter({ store, log: silent });
+  const r = await router.route('刷新补全');
+  assert.equal(r.ok, true);
+  assert.equal(r.intent, 'refresh', '「刷新补全」应路由到 refresh 而非 unknown');
+  assert.match(r.reply, /检索服务未启用/);
+});
+
+test('P1 命令路由：聚焦公司 / 归档 / 恢复（§5.6 多公司并行管理）', async (t) => {
+  const dir = tmpDir(t);
+  const store = new ArchiveStore(dir);
+  store.createCompany({ name: '星辰科技' });
+  store.createCompany({ name: '云图网络' });
+  const router = createCommandRouter({ store, log: silent });
+
+  // 聚焦星辰科技
+  const focus = await router.route('聚焦 星辰科技');
+  assert.equal(focus.ok, true);
+  assert.equal(focus.intent, 'focus');
+  assert.match(focus.reply, /已设为焦点公司/);
+  const focused = store.listCompanies({ includeArchived: true }).find((c) => c.name === '星辰科技');
+  assert.equal(focused.focus, true, 'store 中焦点标记已写入');
+
+  // 聚焦另一家时自动取消上一家焦点
+  await router.route('聚焦 云图网络');
+  const refocused = store.listCompanies({ includeArchived: true }).find((c) => c.name === '星辰科技');
+  assert.equal(refocused.focus, false, '切换焦点后原焦点取消');
+
+  // 归档星辰科技
+  const archive = await router.route('归档 星辰科技');
+  assert.equal(archive.ok, true);
+  assert.equal(archive.intent, 'archive');
+  assert.equal(archive.data.archived, true);
+  const active = store.listCompanies();
+  assert.ok(!active.some((c) => c.name === '星辰科技'), '归档后不在活跃列表');
+  const archived = store.listCompanies({ includeArchived: true }).find((c) => c.name === '星辰科技');
+  assert.equal(archived.archived, true);
+
+  // 恢复星辰科技
+  const restore = await router.route('恢复 星辰科技');
+  assert.equal(restore.ok, true);
+  assert.equal(restore.data.archived, false);
+  assert.ok(store.listCompanies().some((c) => c.name === '星辰科技'), '恢复后回到活跃列表');
+});
+
+test('P1 命令路由：状态显示焦点公司与归档计数', async (t) => {
+  const dir = tmpDir(t);
+  const store = new ArchiveStore(dir);
+  const c1 = store.createCompany({ name: '星辰科技' });
+  store.createCompany({ name: '云图网络' });
+  store.setFocusCompany(c1.companyId);
+  store.archiveCompany(c1.companyId, true);
+  // c1 归档后不在活跃列表，焦点应落在活跃公司上（或为空）
+  const router = createCommandRouter({ store, log: silent });
+  const status = await router.route('状态');
+  assert.equal(status.ok, true);
+  assert.equal(status.intent, 'status');
+  assert.ok(status.data.archivedCount >= 1, '状态显示归档计数');
+});
+
+
 test('离线发件箱：入队 → 真实网关补发 → 清空（§4.5 离线兜底）', async (t) => {
   const dir = tmpDir(t);
   const server = await createMockGatewayServer();
