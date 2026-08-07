@@ -301,15 +301,30 @@ export function nextFocusByRules(scores) {
 // nowcoder"某类问题反复出现/某环节总翻车，闭环了才叫复盘"。
 // 以下纯函数不依赖档案库，便于单测；由 memory.js 编排层串联。
 
-// 提取 session 中的面试官问题（供重复题对比与档案库存储）
+// 提取 session 中的面试官问题（供重复题对比与档案库存储）。
+// 同时提取每个问题对应的候选人回答（供 §5.7 防背答案式刷分检测）。
 export function extractSessionQuestions(session) {
-  return (session.turns ?? [])
-    .filter((t) => t.role === 'interviewer')
-    .map((t) => ({
-      turnNo: t.turnNo ?? null,
-      content: t.content,
-      focusArea: t.focusArea ?? null,
-    }));
+  const turns = session.turns ?? [];
+  const questions = [];
+  for (let i = 0; i < turns.length; i++) {
+    if (turns[i].role !== 'interviewer') continue;
+    // 找到该问题之后最近的候选人回答
+    let answer = '';
+    for (let j = i + 1; j < turns.length; j++) {
+      if (turns[j].role === 'candidate') {
+        answer = turns[j].content ?? '';
+        break;
+      }
+      if (turns[j].role === 'interviewer') break; // 下一个问题前无回答
+    }
+    questions.push({
+      turnNo: turns[i].turnNo ?? null,
+      content: turns[i].content,
+      focusArea: turns[i].focusArea ?? null,
+      answer, // §5.7 防背答案：保存回答供下次对比
+    });
+  }
+  return questions;
 }
 
 // 重复题对比：用 2-gram 相似度判断当前问题是否在上次也问过（阈值 0.4）。
@@ -329,6 +344,8 @@ export function compareRepeatedQuestions(currentQuestions, lastQuestions) {
         current: c.content,
         last: best.last.content,
         similarity: Math.round(best.similarity * 100) / 100,
+        currentAnswer: c.answer ?? '',
+        lastAnswer: best.last.answer ?? '',
       });
     }
   }
@@ -337,6 +354,41 @@ export function compareRepeatedQuestions(currentQuestions, lastQuestions) {
     repeatedCount: repeated.length,
     newCount: cur.length - repeated.length,
     total: cur.length,
+  };
+}
+
+/**
+ * §5.7 防背答案式刷分：若分数提升但重复题的回答与上次高度雷同，教练提示。
+ * 检测逻辑：重复题中，回答相似度 ≥0.7 且该维度分数提升 → 疑似背答案。
+ * @param {object} repeatedResult compareRepeatedQuestions 的输出
+ * @param {object} progress comparedWithLast.progress（{ dim: 'up'|'down'|'flat' }）
+ * @returns {{ suspected: boolean, warnings: string[], similarAnswers: array }}
+ */
+export function detectMemorizedAnswers(repeatedResult, progress = {}) {
+  const repeated = repeatedResult?.repeated ?? [];
+  const warnings = [];
+  const similarAnswers = [];
+  const hasScoreUp = Object.values(progress).some((v) => v === 'up');
+  for (const r of repeated) {
+    if (!r.currentAnswer || !r.lastAnswer) continue;
+    const answerSim = bigramOverlap(r.currentAnswer, r.lastAnswer);
+    if (answerSim >= 0.7) {
+      similarAnswers.push({
+        question: r.current,
+        answerSimilarity: Math.round(answerSim * 100) / 100,
+      });
+      // 分数提升 + 回答高度雷同 → 疑似背答案
+      if (hasScoreUp) {
+        warnings.push(
+          `「${(r.current ?? '').slice(0, 30)}」的回答与上次高度雷同（相似度 ${Math.round(answerSim * 100)}%），但分数有提升——你是背下来了，换种问法还能接住吗？建议同知识点换问法（变体题）再练。`,
+        );
+      }
+    }
+  }
+  return {
+    suspected: warnings.length > 0,
+    warnings,
+    similarAnswers,
   };
 }
 

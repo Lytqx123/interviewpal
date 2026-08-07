@@ -244,6 +244,29 @@ test('缓存：删除岗位后该岗位预分析缓存被释放', async (t) => {
   assert.equal(store.getPosition('c_1', 'p_1'), null);
 });
 
+test('§5.6 删除即释放：删除岗位时该岗位的复盘记录一并清理', async (t) => {
+  const store = tmpStore(t);
+  const { companyId } = store.createCompany({ name: '星辰科技' });
+  const { positionId } = store.createPosition(companyId, { title: '后端', jobType: 'tech' });
+  const { positionId: p2 } = store.createPosition(companyId, { title: '前端', jobType: 'tech' });
+  // 给两个岗位各写一条复盘
+  store.saveReview({
+    reviewId: 'rv_a', companyId, positionId, roundKey: 'round1',
+    scores: { logic: 3 }, improvementList: [], createdAt: '2026-08-01T00:00:00Z',
+  });
+  store.saveReview({
+    reviewId: 'rv_b', companyId, positionId: p2, roundKey: 'round1',
+    scores: { logic: 4 }, improvementList: [], createdAt: '2026-08-01T00:00:00Z',
+  });
+  assert.equal(store.listReviews({ companyId, positionId }).length, 1, '删除前 p1 有 1 条复盘');
+  // 删除岗位 p1
+  store.deletePosition(companyId, positionId);
+  // p1 的复盘应被清理
+  assert.equal(store.listReviews({ companyId, positionId }).length, 0, '删除岗位后 p1 复盘被清理');
+  // p2 的复盘不受影响
+  assert.equal(store.listReviews({ companyId, positionId: p2 }).length, 1, 'p2 复盘不受影响');
+});
+
 test('缓存：删除公司后该公司所有岗位的预分析缓存被释放', async (t) => {
   const store = tmpStore(t);
   const llm = fakeLlm({

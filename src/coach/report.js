@@ -83,6 +83,12 @@ export function formatReport(reviewResult, { session } = {}) {
     if (ic && ic.total > 0) {
       lines.push(`  改进项完成率：上次改进项 ${ic.total} 项，本次完成 ${ic.completed} 项（${Math.round(ic.rate * 100)}%）`);
     }
+    // §5.7 防背答案式刷分预警
+    const mw = comparedWithLast.memorizationWarning;
+    if (mw?.suspected) {
+      lines.push('  ⚠️ 防背答案预警：');
+      for (const w of mw.warnings) lines.push(`    · ${w}`);
+    }
     lines.push('');
   }
 

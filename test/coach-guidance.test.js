@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { createSession, startInterview } from '../src/interviewer/index.js';
 import { analyzeRhythm, buildDifficultyReport, getQuestions, recommendByWeakness, exportReview, createInterviewerAgent, createCoachAgent } from '../src/coach/index.js';
+import { extractSessionQuestions, compareRepeatedQuestions, detectMemorizedAnswers } from '../src/coach/rules.js';
 import { ArchiveStore } from '../src/archive/index.js';
 
 const RESUME = {
@@ -207,6 +208,84 @@ describe('复盘教练 · 双 Agent 分工', () => {
 
   it('CoachAgent 缺 store 报错', () => {
     assert.throws(() => createCoachAgent({}), /store/);
+  });
+});
+
+describe('复盘教练 · 防背答案式刷分（§5.7）', () => {
+  it('extractSessionQuestions：提取问题同时提取候选人回答', () => {
+    const session = {
+      turns: [
+        { role: 'interviewer', content: '说说 Redis 持久化', turnNo: 1 },
+        { role: 'candidate', content: 'Redis 有 RDB 和 AOF 两种方式' },
+        { role: 'interviewer', content: '消息队列怎么选型', turnNo: 2 },
+        { role: 'candidate', content: '看吞吐量和可靠性需求' },
+      ],
+    };
+    const qs = extractSessionQuestions(session);
+    assert.equal(qs.length, 2);
+    assert.equal(qs[0].content, '说说 Redis 持久化');
+    assert.equal(qs[0].answer, 'Redis 有 RDB 和 AOF 两种方式');
+    assert.equal(qs[1].answer, '看吞吐量和可靠性需求');
+  });
+
+  it('detectMemorizedAnswers：分数提升 + 回答高度雷同 → 疑似背答案', () => {
+    const repeated = {
+      repeated: [
+        {
+          current: '说说 Redis 持久化',
+          last: '说说 Redis 持久化',
+          similarity: 0.95,
+          currentAnswer: 'Redis 有 RDB 和 AOF 两种方式，RDB 是快照，AOF 是追加日志',
+          lastAnswer: 'Redis 有 RDB 和 AOF 两种方式，RDB 是快照，AOF 是追加日志',
+        },
+      ],
+      repeatedCount: 1,
+    };
+    const progress = { depth: 'up', logic: 'flat' };
+    const result = detectMemorizedAnswers(repeated, progress);
+    assert.equal(result.suspected, true, '分数提升+回答雷同→疑似背答案');
+    assert.ok(result.warnings.length > 0, '有预警信息');
+    assert.ok(result.warnings[0].includes('背下来'), '预警含"背下来"提示');
+    assert.ok(result.warnings[0].includes('变体题'), '预警建议换问法（变体题）');
+  });
+
+  it('detectMemorizedAnswers：分数未提升时不预警（即使回答雷同）', () => {
+    const repeated = {
+      repeated: [
+        {
+          current: '说说 Redis 持久化',
+          last: '说说 Redis 持久化',
+          similarity: 0.95,
+          currentAnswer: 'Redis 有 RDB 和 AOF 两种方式',
+          lastAnswer: 'Redis 有 RDB 和 AOF 两种方式',
+        },
+      ],
+      repeatedCount: 1,
+    };
+    const progress = { depth: 'flat', logic: 'down' }; // 无提升
+    const result = detectMemorizedAnswers(repeated, progress);
+    assert.equal(result.suspected, false, '分数未提升时不预警');
+    assert.equal(result.warnings.length, 0);
+    // 但仍记录相似回答
+    assert.equal(result.similarAnswers.length, 1);
+  });
+
+  it('detectMemorizedAnswers：回答不同时不预警', () => {
+    const repeated = {
+      repeated: [
+        {
+          current: '说说 Redis 持久化',
+          last: '说说 Redis 持久化',
+          similarity: 0.95,
+          currentAnswer: 'RDB 是内存快照，AOF 是命令日志，各有利弊需要权衡',
+          lastAnswer: 'Redis 有 RDB 和 AOF 两种方式',
+        },
+      ],
+      repeatedCount: 1,
+    };
+    const progress = { depth: 'up' };
+    const result = detectMemorizedAnswers(repeated, progress);
+    assert.equal(result.suspected, false, '回答不同时不预警');
   });
 });
 

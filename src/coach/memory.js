@@ -12,6 +12,7 @@ import {
   improvementCompletionRate,
   markAlsoStuckLastTime,
   makeCheckable,
+  detectMemorizedAnswers,
 } from './rules.js';
 import { updateStrategyCacheWithFeedback } from './selfLearn.js';
 import { preanalysisCacheKey } from '../preanalysis/cache.js';
@@ -82,14 +83,18 @@ export async function reviewWithMemory(session, {
   return { result, record: saved, report, lastReview };
 }
 
-// 跨场次对比增强：在六维升降基础上，叠加重复题对比 + 改进项完成率。
+// 跨场次对比增强：在六维升降基础上，叠加重复题对比 + 改进项完成率 + 防背答案检测（§5.7）。
 function enrichComparison(result, session, lastReview) {
   const base = result.comparedWithLast ?? { progress: {}, summary: '首次面试，无对比' };
   const currentQuestions = extractSessionQuestions(session);
+  const repeated = compareRepeatedQuestions(currentQuestions, lastReview.questions ?? []);
+  // §5.7 防背答案式刷分：分数提升 + 重复题回答高度雷同 → 教练提示
+  const memorization = detectMemorizedAnswers(repeated, base.progress ?? {});
   return {
     ...base,
-    repeatedQuestions: compareRepeatedQuestions(currentQuestions, lastReview.questions ?? []),
+    repeatedQuestions: repeated,
     improvementCompletion: improvementCompletionRate(result.scores, lastReview.improvementList ?? []),
+    memorizationWarning: memorization,
   };
 }
 
