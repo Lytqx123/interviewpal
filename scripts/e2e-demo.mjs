@@ -196,9 +196,10 @@ export async function runDemo({ dir = MOCK_DIR, storeDir = null, reset = true, l
   });
   p(review1.report);
   const dev1 = review1.result.directionDeviation ?? {};
+  const toArr = (v) => (Array.isArray(v) ? v : v ? [v] : []);
   p('【方向偏差】');
-  p(`  预期：${(dev1.expected ?? []).join('、') || '无'}`);
-  p(`  实际：${(dev1.actual ?? []).join('、') || '无'}`);
+  p(`  预期：${toArr(dev1.expected).join('、') || '无'}`);
+  p(`  实际：${toArr(dev1.actual).join('、') || '无'}`);
   p(`  说明：${dev1.notes ?? ''}`);
   p();
 

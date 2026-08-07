@@ -3,6 +3,7 @@ import {
   buildAudioFrame,
   buildControlFrame,
   parseFrame,
+  EV_START_CONNECTION,
   EV_CONNECTION_STARTED,
   EV_START_SESSION,
   EV_SESSION_STARTED,
@@ -38,6 +39,8 @@ const state = {
   roundKey: 'round1',
   companyId: '',
   positionId: '',
+  selected: null, // 选中的 ready item { companyId, positionId }
+  readyList: [], // /voice/ready 返回的 items
 };
 
 function setStatus(cls, msg) {
@@ -307,13 +310,12 @@ async function connect() {
   }
 
   if (state.status.coordination) {
-    const companyId = $('companyId').value.trim();
-    const positionId = $('positionId').value.trim();
-    const roundKey = $('roundKey').value;
-    if (!companyId || !positionId) {
-      setStatus('error', '请填写公司 ID 与岗位 ID');
+    if (!state.selected) {
+      setStatus('error', '请先选择一场面试');
       return;
     }
+    const { companyId, positionId } = state.selected;
+    const roundKey = $('roundKey').value;
     append('sys', '创建语音面试会话（预分析 + 面试官 session）…');
     const startRes = await fetch('/voice/start-session', {
       method: 'POST',
@@ -338,9 +340,11 @@ async function connect() {
   state.startedAt = Date.now();
   state.durationTimer = setInterval(updateMetrics, 1000);
   setStatus('connecting', '连接中…');
-  append('sys', `连接本地代理 ws://${location.host}/voice/ws`);
+  // 根据页面协议动态选择 ws/wss（路径 A：Tailscale Serve 走 wss://）
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  append('sys', `连接语音中继 ${wsProto}//${location.host}/voice/ws`);
 
-  const ws = new WebSocket(`ws://${location.host}/voice/ws${q.toString() ? `?${q}` : ''}`);
+  const ws = new WebSocket(`${wsProto}//${location.host}/voice/ws${q.toString() ? `?${q}` : ''}`);
   ws.binaryType = 'arraybuffer';
   state.ws = ws;
 
@@ -350,7 +354,7 @@ async function connect() {
 
   ws.onopen = () => {
     append('sys', '代理已连接，发送 StartConnection(1)');
-    sendControl(EV_CONNECTION_STARTED, { sessionId: null, payload: {} });
+    sendControl(EV_START_CONNECTION, { sessionId: null, payload: {} });
   };
   ws.onmessage = (e) => {
     state.msgQueue = state.msgQueue
@@ -445,6 +449,65 @@ function fetchReview() {
     })
     .catch(() => {});
 }
+
+// ============ 准备好的面试卡片（一键开始，无需手填 ID） ============
+async function loadReady() {
+  if (!state.status?.coordination) {
+    $('readyList').innerHTML = '<div class="empty">未启用档案库联动（coordination 未就绪），可在 mock 模式下直接开始。</div>';
+    return;
+  }
+  try {
+    const res = await fetch('/voice/ready');
+    const data = await res.json();
+    state.readyList = data.items || [];
+    renderReady();
+  } catch (e) {
+    $('readyList').innerHTML = `<div class="empty">加载失败：${e.message}</div>`;
+  }
+}
+
+function renderReady() {
+  const list = $('readyList');
+  if (!state.readyList.length) {
+    list.innerHTML = '<div class="empty">还没有准备好的面试。请在手机 APP 里：上传简历 → 粘贴 JD → 投递岗位。</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const item of state.readyList) {
+    const div = document.createElement('div');
+    div.className = 'ready-item';
+    const roundChips = item.rounds
+      .map((r) => {
+        const cls = r.practicedCount > 0 ? 'round-chip practiced' : 'round-chip';
+        return `<span class="${cls}">${r.label} ×${r.practicedCount}</span>`;
+      })
+      .join('');
+    div.innerHTML = `
+      <div class="title">${item.companyName} · ${item.positionTitle}</div>
+      <div class="sub">${item.appliedAt ? `已投递 · 简历 v${item.resumeVersionNo ?? '?'}` : '未投递（用最新简历练）'}</div>
+      <div class="rounds">${roundChips}</div>
+    `;
+    div.onclick = () => selectReady(item, div);
+    list.appendChild(div);
+  }
+}
+
+function selectReady(item, el) {
+  document.querySelectorAll('.ready-item').forEach((n) => n.classList.remove('selected'));
+  el.classList.add('selected');
+  state.selected = { companyId: item.companyId, positionId: item.positionId };
+  $('sessionCard').hidden = false;
+  $('sessionTitle').textContent = `${item.companyName} · ${item.positionTitle}`;
+  $('sessionSub').textContent = item.appliedAt
+    ? `已投递 · 简历 v${item.resumeVersionNo ?? '?'} · ${new Date(item.appliedAt).toLocaleString('zh-CN')}`
+    : '未投递（将用最新简历版本练）';
+  // 推荐轮次：第一个未练的，否则最近练的
+  const recommend = item.rounds.find((r) => r.practicedCount === 0) ?? item.rounds[item.rounds.length - 1];
+  $('roundKey').value = recommend.roundKey;
+  $('connect').disabled = false;
+  append('sys', `已选择：${item.companyName} · ${item.positionTitle}，推荐${recommend.label}`);
+}
+
 // ============ 初始化 ============
 async function init() {
   try {
@@ -471,6 +534,7 @@ async function init() {
   $('connect').onclick = connect;
   $('hangup').onclick = () => hangup();
   window.addEventListener('beforeunload', hangup);
+  loadReady();
 }
 
 init();

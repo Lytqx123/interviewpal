@@ -72,7 +72,7 @@ export async function startGatewayBootstrap({
 
   if (!store) store = new ArchiveStore(dataDir);
   if (!llm) llm = createLlmFromEnv(process.env, path.join(process.cwd(), '.env.local'));
-  if (!search) search = createSearchProviderFromEnv(process.env);
+  if (!search) search = createSearchProviderFromEnv(process.env, null, llm);
   if (!coordination) {
     coordination = createVoiceCoordination({ store, llm, search, log: logger });
   }

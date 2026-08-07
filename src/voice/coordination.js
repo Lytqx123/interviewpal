@@ -8,11 +8,38 @@ import { generatePlan } from '../preanalysis/engine.js';
 import { createSession, startInterview, nextQuestion, closeInterview, getSessionSummary } from '../interviewer/index.js';
 import { prepareRound2Context } from '../interviewer/rounds.js';
 import { reviewWithMemory } from '../coach/memory.js';
+import { ROUND_KEYS } from '../archive/constants.js';
 
 const MAX_SYSTEM_PROMPT_CHARS = 2000;
 
 function roundLabel(roundKey) {
   return roundKey === 'round1' ? '一面简历面' : roundKey === 'round2' ? '二面业务面' : '三面总监交叉面';
+}
+
+/**
+ * 构造一条"准备好的面试"：公司+岗位+各轮次练习情况，供浏览器一键开始。
+ */
+function buildReadyItem({ store, company, position, appliedAt = null, resumeVersionNo = null }) {
+  const reviews = store.listReviews({ companyId: company.companyId, positionId: position.positionId });
+  const rounds = ROUND_KEYS.map((roundKey) => {
+    const rs = reviews.filter((r) => r.roundKey === roundKey);
+    return {
+      roundKey,
+      label: roundLabel(roundKey),
+      practicedCount: rs.length,
+      lastPracticedAt: rs[0]?.createdAt ?? null,
+    };
+  });
+  return {
+    companyId: company.companyId,
+    companyName: company.name,
+    positionId: position.positionId,
+    positionTitle: position.title,
+    jobType: position.jobType ?? 'tech',
+    appliedAt,
+    resumeVersionNo,
+    rounds,
+  };
 }
 
 function compactJson(value, max = 400) {
@@ -22,7 +49,9 @@ function compactJson(value, max = 400) {
 
 /**
  * 从预分析七大层生成浓缩 System Prompt（≤2K 字符）：
- * ③本轮人设 + ②候选人画像 + ①JD 要点 + ④本轮考察策略 + ⑤风险预判 + ⑦节奏体验。
+ * ③本轮人设 + ②候选人画像 + ①JD 要点 + ④本轮考察策略（含跨轮去重）+ ⑤风险预判（含跨轮风险传递）+ ⑦节奏体验。
+ * 组装顺序遵循 §5.5：全局层（①②⑤）→ 轮次层（③④⑦）→ 当次数据（跨轮去重清单）。
+ * ①-⑤层只源于简历+JD 推导，不含历次练习转写（面试官失忆，§5.7）。
  */
 export function buildInterviewerSystemPrompt({ preanalysisPlan, roundKey, resumeProfile, jobProfile }) {
   const layers = preanalysisPlan?.layers;
@@ -41,6 +70,11 @@ export function buildInterviewerSystemPrompt({ preanalysisPlan, roundKey, resume
       }))
     : [];
 
+  // ④层跨轮去重清单：本场不重复上一轮已问的问题（计划层，非历次练习记忆）
+  const dedupList = Array.isArray(strategy?.dedupList) ? strategy.dedupList : [];
+  // ⑤层跨轮风险传递：一面暴露的问题→二面跟进验证（计划层，非历次练习记忆）
+  const crossRoundRisks = Array.isArray(rf?.crossRoundRisks) ? rf.crossRoundRisks : [];
+
   const parts = [
     `你是${persona?.identity ?? '面试官'}，正在进行${roundLabel(roundKey)}。`,
     jobProfile?.companyName ? `目标公司：${jobProfile.companyName}` : '',
@@ -53,7 +87,13 @@ export function buildInterviewerSystemPrompt({ preanalysisPlan, roundKey, resume
     jd ? `JD 要点：${compactJson({ roleNature: jd.roleNature, level: jd.level, coreResponsibilities: jd.coreResponsibilities, redLines: jd.redLines })}` : '',
     chains.length ? `本场考察策略：${compactJson({ dimensions: strategy.dimensions, followupChains: chains })}` : '',
     rf ? `风险预判：${compactJson({ likelyStuck: rf.likelyStuck?.slice(0, 2), exaggerationPoints: rf.exaggerationPoints?.slice(0, 1) })}` : '',
+    // ⑤层跨轮风险传递（计划层）：本轮需跟进验证的风险
+    crossRoundRisks.length ? `跨轮风险跟进：${crossRoundRisks.slice(0, 2).map((r) => `${r.risk}（${r.followupRound}）`).join('；')}` : '',
+    // ④层跨轮去重清单（当次数据）：本轮不重复上轮已问的问题
+    dedupList.length ? `跨轮去重：${dedupList.slice(0, 3).join('；')}` : '',
     rhythm ? `节奏与体验：${rhythm.curve}；时长与问题数：${rhythm.durationAndCount}` : '',
+    // 动态调整指令（§5.4：计划是基线不是脚本）
+    '动态调整：候选人展现意外深度→延伸追问到能力边界；暴露新弱点→临时插入追问；严重卡壳→降一档难度并调用救援策略；与简历矛盾→切换验证模式追问到底；主动引导到擅长领域→先展示再施压测上限。每条追问链最多降档1次，换线需2个信号叠加。',
     '要求：一次只问一个问题；先简短回应候选人再追问；回答卡壳时降一档难度，偏题时先拉回；口语自然，不书面化、不列要点。',
   ].filter(Boolean);
 
@@ -141,10 +181,66 @@ export async function createVoiceInterviewSession({
   };
 }
 
-/** ASR 文本回写：作为候选人回答喂给面试官 session（信号提取 + 动态决策），返回下一问题。 */
-export function handleAsrText(session, text) {
+/** ASR 文本回写：作为候选人回答喂给面试官 session（信号提取 + 动态决策），返回下一问题与注入决策。 */
+export async function handleAsrText(session, text) {
   if (!session || session.state === 'closed' || typeof text !== 'string' || !text.trim()) return null;
-  return nextQuestion(session, text);
+  const result = await nextQuestion(session, text);
+  if (!result) return null;
+  // 构建动态调整注入决策（仅在显著调整时注入，避免过度干预自然对话）
+  const injection = buildAdjustmentInjection(result, session);
+  return { ...result, injection };
+}
+
+/**
+ * 根据本地协调层的动态决策，构建 ChatRAGText 注入指引。
+ * 仅在显著调整（拉回/降档/换线/严重卡壳）时注入——这些场景需要主动引导面试官回应方向；
+ * 正常流程（继续/深挖）不注入，保留实时语音模型的自然对话感。
+ *
+ * 注入时机说明：ASR(451) 到达后立刻发送 ChatRAGText(502)，尽力在模型生成 LLM(550)
+ * 前注入；即便时序紧、当轮未生效，executionTrace 仍完整记录信号与决策供复盘教练消费。
+ */
+function buildAdjustmentInjection(result, session) {
+  const adjustment = result.adjustment ?? null;
+  const lastSignal = session.signals?.[session.signals.length - 1]?.signals ?? null;
+  if (!adjustment && !lastSignal) return null;
+
+  // 换线：候选人在当前维度严重卡壳或偏题+浅薄，需要切换到下一条追问链
+  if (adjustment === 'switch-line') {
+    return [
+      {
+        title: '面试官调整提示',
+        content: `候选人在当前维度严重卡壳/偏题，已切换到下一条考察线。请自然过渡："我们换个角度来聊。"然后提出下一个问题。`,
+      },
+    ];
+  }
+  // 拉回：候选人回答偏题，需要拉回主线
+  if (adjustment === 'pull-back') {
+    return [
+      {
+        title: '面试官调整提示',
+        content: `候选人刚才的回答偏离了问题核心。请温和拉回："我们回到刚才的问题。"然后换个角度重新提问。`,
+      },
+    ];
+  }
+  // 降档：候选人卡壳（流畅度差/难度高），需要降低难度
+  if (adjustment === 'level-down') {
+    return [
+      {
+        title: '面试官调整提示',
+        content: `候选人刚才回答比较吃力（卡壳/难度偏高）。请降一档难度，换个更简单的角度引导："没关系，我们换个更基础的角度说说。"`,
+      },
+    ];
+  }
+  // 无 adjustment 但信号显示严重卡壳（difficulty=high + fluency=poor）→ 救援
+  if (lastSignal && lastSignal.difficulty === 'high' && lastSignal.fluency === 'poor') {
+    return [
+      {
+        title: '面试官救援提示',
+        content: `候选人严重卡壳。请给予鼓励并降低难度："没关系，这个确实比较难，我们换个角度想想。"避免连续施压导致全程崩盘。`,
+      },
+    ];
+  }
+  return null;
 }
 
 /** ChatResponse 文本采集：把面试官（实时语音模型）发言记录到 session，供复盘引用。 */
@@ -201,6 +297,47 @@ export function createVoiceCoordination({ store, llm = null, search = null, log 
   const finishing = new Map(); // sessionKey -> in-flight finish promise（防并发重复收尾/复盘）
 
   return {
+    /**
+     * 列出"准备好的面试"：投递快照 + 各轮次练习情况，供浏览器一键开始。
+     * 没有投递时退而列出所有公司+岗位（用最新简历版本练）。
+     * latest 指向最近一次有复盘的轮次，没有复盘就默认 round1。
+     */
+    ready() {
+      const items = [];
+      const applications = store.listApplications();
+      for (const app of applications) {
+        const company = store.getCompany(app.companyId);
+        const position = store.getPosition(app.companyId, app.positionId);
+        if (!company || !position) continue;
+        items.push(
+          buildReadyItem({
+            store,
+            company,
+            position,
+            appliedAt: app.submittedAt,
+            resumeVersionNo: app.resumeVersionNo,
+          }),
+        );
+      }
+      // 没有投递：列出所有公司+岗位（用最新简历版本练）
+      if (!items.length) {
+        for (const company of store.listCompanies()) {
+          for (const position of store.listPositions(company.companyId)) {
+            items.push(buildReadyItem({ store, company, position }));
+          }
+        }
+      }
+      let latest = null;
+      const allReviews = store.listReviews();
+      if (allReviews.length) {
+        const r = allReviews[0];
+        latest = { companyId: r.companyId, positionId: r.positionId, roundKey: r.roundKey };
+      } else if (items.length) {
+        latest = { companyId: items[0].companyId, positionId: items[0].positionId, roundKey: 'round1' };
+      }
+      return { items, latest };
+    },
+
     async start({ companyId, positionId, roundKey = 'round1' }) {
       const created = await createVoiceInterviewSession({ store, llm, search, companyId, positionId, roundKey });
       sessions.set(created.sessionKey, {
@@ -219,7 +356,7 @@ export function createVoiceCoordination({ store, llm = null, search = null, log 
       return sessions.get(sessionKey)?.config ?? null;
     },
 
-    handleAsr(sessionKey, text) {
+    async handleAsr(sessionKey, text) {
       const entry = sessions.get(sessionKey);
       if (!entry) return null;
       return handleAsrText(entry.session, text);

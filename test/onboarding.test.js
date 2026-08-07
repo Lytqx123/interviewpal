@@ -23,7 +23,7 @@ test('上传简历：无公司时只存档，不补全', async (t) => {
   const result = await handleResumeUpload({
     store,
     llm: null,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     content: RESUME_TEXT,
   });
   assert.ok(result.resumeProfile.skills.length >= 2);
@@ -41,7 +41,7 @@ test('上传简历：带公司名时补全入 round1 缓存', async (t) => {
   const result = await handleResumeUpload({
     store,
     llm: null,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     companyName: '字节跳动',
     content: RESUME_TEXT,
   });
@@ -64,7 +64,7 @@ test('粘贴 JD：解析 → 建公司 → 岗位画像 → round2 补全', asyn
   const result = await handleJdPaste({
     store,
     llm: null,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     jdText,
   });
   assert.equal(result.jobProfile.jobType, 'product');
@@ -81,14 +81,14 @@ test('粘贴 JD：重复粘贴同一家公司复用公司档案', async (t) => {
   const first = await handleJdPaste({
     store,
     llm: null,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     companyName: '星辰科技',
     jdText: '岗位名称：后端工程师',
   });
   const second = await handleJdPaste({
     store,
     llm: null,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     companyName: '星辰科技',
     jdText: '岗位名称：测试工程师',
   });
@@ -121,13 +121,13 @@ test('投递：上传简历 + 粘贴 JD → 投递生成冻结快照，重复投
   await handleResumeUpload({
     store,
     llm: null,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     content: RESUME_TEXT,
   });
   await handleJdPaste({
     store,
     llm: null,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     companyName: '星辰科技',
     jdText: '岗位名称：产品经理',
   });

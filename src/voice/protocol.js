@@ -30,9 +30,15 @@ export const EV_STREAM_FINISHED = 153;
 
 // 音频与过程事件
 export const EV_AUDIO = 200;
-export const EV_INTERRUPT = 450;
+export const EV_SAY_HELLO = 300; // 客户端提交打招呼文本（开场注入）
+export const EV_INTERRUPT = 450; // 客户端打断服务端响应（push_to_talk 模式）
 export const EV_ASR = 451;
 export const EV_LLM = 550;
+
+// 文本注入类事件（豆包端到端实时语音 API：动态调整闭环用）
+export const EV_CHAT_TTS_TEXT = 500; // 指定文本合成音频（替代模型闲聊结果）
+export const EV_CHAT_TEXT_QUERY = 501; // 用户文本 query（替代音频输入）
+export const EV_CHAT_RAG_TEXT = 502; // 注入外部 RAG 知识，模型总结后口语化播报
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -111,6 +117,29 @@ export function buildAudioFrame(sessionId, pcmBytes) {
     event: EV_AUDIO,
     sessionId,
     payloadBytes: pcmBytes,
+  });
+}
+
+/**
+ * 客户端 ChatRAGText(502) 帧：向端到端实时语音模型注入外部 RAG 知识。
+ * 模型会对 external_rag 内容做总结与口语化改写后播报。
+ * 用途：动态调整闭环——当本地协调层判定需要显著调整（拉回/降档/换线/卡壳救援）时，
+ *   把调整指引作为 RAG 注入上游，引导面试官下一轮回应方向。
+ * @param {string} sessionId 会话 ID
+ * @param {Array<{title:string,content:string}>} ragItems RAG 条目（整体 ≤4K 字符）
+ */
+export function buildChatRagFrame(sessionId, ragItems) {
+  const externalRag = JSON.stringify(
+    Array.isArray(ragItems) ? ragItems : [ragItems],
+  );
+  return buildFrame({
+    messageType: SP_CLIENT_FULL,
+    flags: SP_FLAG_EVENT,
+    serial: SP_SERIAL_JSON,
+    compression: SP_COMPRESS_NONE,
+    event: EV_CHAT_RAG_TEXT,
+    sessionId,
+    payloadBytes: encoder.encode(JSON.stringify({ external_rag: externalRag })),
   });
 }
 

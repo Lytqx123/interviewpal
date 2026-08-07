@@ -23,6 +23,7 @@ import {
   EV_ASR,
   EV_LLM,
   EV_INTERRUPT,
+  EV_CHAT_RAG_TEXT,
   buildFrame,
   parseFrame,
 } from './protocol.js';
@@ -74,7 +75,7 @@ export function makeBeepPcm(seconds = 0.4, freq = 440) {
  * 启动一个本地 Mock 服务端。
  * onConnection({ ws, headers }) 可用于测试时断言上游收到的鉴权 header。
  */
-export async function createMockDoubaoServer({ onConnection, onStartSession } = {}) {
+export async function createMockDoubaoServer({ onConnection, onStartSession, onChatRagText } = {}) {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   await new Promise((resolve, reject) => {
     wss.once('listening', resolve);
@@ -82,6 +83,7 @@ export async function createMockDoubaoServer({ onConnection, onStartSession } = 
   });
   const connections = new Set();
   const replied = new Set();
+  const receivedRagTexts = [];
 
   wss.on('connection', (ws, req) => {
     connections.add(ws);
@@ -114,6 +116,20 @@ export async function createMockDoubaoServer({ onConnection, onStartSession } = 
       } else if (frame.event === EV_FINISH_CONNECTION) {
         ws.send(buildServerFrame({ event: EV_CONNECTION_STARTED, payloadJson: {} }));
         ws.close();
+      } else if (frame.event === EV_CHAT_RAG_TEXT) {
+        // 动态调整注入：Mock 收到 ChatRAGText(502) 后，回放一段"已采纳调整指引"的 LLM 文本，
+        // 验证注入闭环（ASR → 本地决策 → ChatRAGText 注入 → 上游响应）。
+        receivedRagTexts.push({ sessionId: sid, payload: frame.payloadJson });
+        if (onChatRagText) onChatRagText({ sessionId: sid, payload: frame.payloadJson });
+        ws.send(
+          buildServerFrame({
+            event: EV_LLM,
+            sessionId: sid,
+            payloadJson: {
+              content: '（Mock·已采纳调整指引）我们换个角度来聊，先回到刚才的问题。',
+            },
+          }),
+        );
       } else if (frame.event === EV_AUDIO && !replied.has(sid)) {
         replied.add(sid);
         // 先发打断事件（验证浏览器停止播放），再回文本与音频。
@@ -158,6 +174,7 @@ export async function createMockDoubaoServer({ onConnection, onStartSession } = 
       return wss.address().port;
     },
     connections,
+    receivedRagTexts,
     close: () =>
       new Promise((resolve) => {
         for (const ws of [...connections]) {

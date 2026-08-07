@@ -108,6 +108,11 @@ test('System Prompt：包含人设/画像/策略/节奏，长度 ≤2000，轮�
   });
   assert.notEqual(p1, p2, '轮次不同 System Prompt 不同');
   assert.ok(p2.includes('二面业务面'));
+  // ④层跨轮去重清单 + ⑤层跨轮风险传递（§5.5：轮次提示词含跨轮去重；§5.4：⑤层跨轮风险传递）
+  assert.ok(p2.includes('跨轮去重'), '二面 System Prompt 含跨轮去重清单');
+  assert.ok(p2.includes('跨轮风险跟进'), '二面 System Prompt 含跨轮风险传递');
+  // 动态调整指令（§5.4：计划是基线不是脚本）
+  assert.ok(p2.includes('动态调整'), 'System Prompt 含动态调整指令');
 
   const positionB = { ...position, title: '产品经理', jobType: 'product' };
   const planB = buildFallbackPlan({ resumeVersion, company, position: positionB });
@@ -164,6 +169,34 @@ test('ASR 文本回写：executionTrace 出现信号/耗时记录，并返回下
   assert.ok(entry.signals?.difficulty, '有信号');
   assert.ok(Number.isFinite(entry.elapsedMs), '有实际耗时');
   assert.ok('adjustment' in entry, '有调整标记');
+});
+
+test('动态调整闭环：正常回答不注入，显著卡壳触发 switch-line 注入指引', async (t) => {
+  const store = tmpStore(t);
+  const { company, position } = seedStore(store);
+  const created = await createVoiceInterviewSession({
+    store,
+    llm: null,
+    companyId: company.companyId,
+    positionId: position.positionId,
+    roundKey: 'round1',
+  });
+
+  // 第一轮正常回答：currentId=null → nextBaseline 设置 currentMainlineId，无调整 → 无注入
+  const r1 = await handleAsrText(created.session, '我负责订单系统的核心模块，QPS 提升 4 倍，用了 Redis 做缓存');
+  assert.ok(r1 && r1.question, '第一轮返回下一问题');
+  assert.ok(!r1.injection, '正常回答不触发注入');
+
+  // 第二轮严重卡壳（嗯嗯呃呃 → high+poor+shallow → collapsed → switch-line）→ 注入调整指引
+  const r2 = await handleAsrText(created.session, '嗯嗯呃呃');
+  assert.ok(r2, '第二轮返回结果');
+  assert.ok(r2.injection, '严重卡壳触发动态调整注入');
+  assert.ok(Array.isArray(r2.injection) && r2.injection.length > 0, '注入为 RAG 条目数组');
+  assert.ok(r2.injection[0].title && r2.injection[0].content, 'RAG 条目含 title/content');
+  assert.ok(
+    r2.adjustment === 'switch-line' || r2.adjustment === 'level-down',
+    `显著调整类型=${r2.adjustment}`,
+  );
 });
 
 test('ChatResponse 文本采集：面试官发言进入 session，且不重复采集', async (t) => {

@@ -23,12 +23,14 @@ import { createSearchProviderFromEnv } from '../search/env.js';
 import { loadEnvFile } from '../config/env.js';
 import {
   buildControlFrame,
+  buildChatRagFrame,
   parseFrame,
   EV_START_SESSION,
   EV_FINISH_SESSION,
   EV_ASR,
   EV_LLM,
   EV_SESSION_FINISHED,
+  EV_CHAT_RAG_TEXT,
 } from './protocol.js';
 
 const DEFAULT_TARGET = 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue';
@@ -65,7 +67,8 @@ export function readVoiceConfig(env = process.env, envFile = DEFAULT_ENV_FILE) {
   const truthy = (v) => v != null && /^(1|true|yes|on)$/i.test(String(v).trim());
   return {
     appId: (merged.DOUBAO_APP_ID || '').trim(),
-    accessKey: (merged.DOUBAO_ACCESS_KEY || merged.DOUBAO_API_KEY || '').trim(),
+    accessKey: (merged.DOUBAO_ACCESS_KEY || '').trim(),
+    apiKey: (merged.DOUBAO_API_KEY || '').trim(),
     appKey: (merged.DOUBAO_APP_KEY || '').trim() || DEFAULT_APP_KEY,
     resourceId: (merged.DOUBAO_RESOURCE_ID || '').trim() || 'volc.speech.dialog',
     target: (merged.DOUBAO_WS_URL || '').trim() || DEFAULT_TARGET,
@@ -82,7 +85,12 @@ function isLocalOrigin(origin) {
   if (!origin) return true;
   try {
     const u = new URL(origin);
-    return u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1';
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1') return true;
+    // 路径 A：允许 Tailscale 来源（跨网络手机浏览器语音面试）
+    // ts.net 主机名（MagicDNS）+ 100.x.x.x（Tailscale CGNAT 网段）
+    if (u.hostname.endsWith('.ts.net')) return true;
+    if (/^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(u.hostname)) return true;
+    return false;
   } catch {
     return false;
   }
@@ -94,10 +102,19 @@ function rejectUpgrade(socket, code, message) {
 }
 
 function resolveAuth(cfg, url) {
+  // 新版控制台：API Key 鉴权（推荐，仅需 DOUBAO_API_KEY）
+  if (cfg.apiKey) {
+    return { apiKey: cfg.apiKey, source: 'env' };
+  }
+  // 旧版控制台：APP ID + Access Token 鉴权
   if (cfg.appId && cfg.accessKey) {
     return { appId: cfg.appId, accessKey: cfg.accessKey, appKey: cfg.appKey, source: 'env' };
   }
   if (!cfg.requireEnv) {
+    const apiKey = (url.searchParams.get('apiKey') || '').trim();
+    if (apiKey) {
+      return { apiKey, source: 'page' };
+    }
     const appId = (url.searchParams.get('appId') || '').trim();
     const accessKey = (url.searchParams.get('accessKey') || '').trim();
     if (appId && accessKey) {
@@ -114,12 +131,18 @@ function resolveAuth(cfg, url) {
 
 function buildAuthHeaders(cfg, auth) {
   const headers = {
-    'X-Api-App-ID': auth.appId,
-    'X-Api-Access-Key': auth.accessKey,
     'X-Api-Resource-Id': cfg.resourceId,
     'X-Api-Connect-Id': crypto.randomUUID(),
   };
-  if (auth.appKey) headers['X-Api-App-Key'] = auth.appKey;
+  if (auth.apiKey) {
+    // 新版控制台：X-Api-Key 鉴权
+    headers['X-Api-Key'] = auth.apiKey;
+  } else {
+    // 旧版控制台：X-Api-App-ID + X-Api-Access-Key + X-Api-App-Key 鉴权
+    headers['X-Api-App-ID'] = auth.appId;
+    headers['X-Api-Access-Key'] = auth.accessKey;
+    if (auth.appKey) headers['X-Api-App-Key'] = auth.appKey;
+  }
   return headers;
 }
 
@@ -129,6 +152,20 @@ async function handleRequest(req, res, cfg, coordination) {
     res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(obj));
   };
+
+  // 浏览器"一键开始面试"：列出投递快照 + 各轮次练习情况，无需手填 ID
+  if (req.method === 'GET' && url.pathname === '/voice/ready') {
+    if (!coordination) {
+      sendJson(501, { error: 'coordination not enabled' });
+      return;
+    }
+    try {
+      sendJson(200, coordination.ready());
+    } catch (err) {
+      sendJson(500, { error: err.message });
+    }
+    return;
+  }
 
   if (req.method === 'POST' && url.pathname === '/voice/start-session') {
     if (!coordination) {
@@ -205,7 +242,7 @@ function serveStatic(req, res, cfg, coordination) {
     res.end(
       JSON.stringify({
         mock: cfg.mock,
-        envConfigured: Boolean(cfg.appId && cfg.accessKey),
+        envConfigured: Boolean(cfg.apiKey || (cfg.appId && cfg.accessKey)),
         requireEnv: cfg.requireEnv,
         target: cfg.mock ? 'mock' : cfg.target,
         session: {
@@ -276,7 +313,7 @@ function handleUpgrade(req, socket, head, cfg, wss, ctx) {
       rejectUpgrade(
         socket,
         401,
-        '缺少凭据：请在 .env.voice.local 配置 DOUBAO_APP_ID / DOUBAO_ACCESS_KEY，或在页面填写 App ID / Access Key',
+        '缺少凭据：请在 .env.voice.local 配置 DOUBAO_API_KEY（新版推荐）或 DOUBAO_APP_ID / DOUBAO_ACCESS_KEY（旧版），或在页面填写',
       );
       return;
     }
@@ -329,9 +366,20 @@ function handleUpgrade(req, socket, head, cfg, wss, ctx) {
                 ? results.map((r) => (r && r.text) || '').join('')
                 : '';
               if (text) {
-                Promise.resolve(ctx.coordination.handleAsr(frame.sessionId, text)).catch((e) =>
-                  log.error('[voice] asr handling failed:', e.message),
-                );
+                // 动态调整闭环：ASR 文本回写本地协调层，若返回显著调整注入指引，
+                // 则向上游发送 ChatRAGText(502) 帧引导面试官下一轮回应方向（§5.4）。
+                Promise.resolve(ctx.coordination.handleAsr(frame.sessionId, text))
+                  .then((res) => {
+                    if (!res?.injection) return;
+                    if (upstream.readyState !== WebSocket.OPEN) return;
+                    try {
+                      upstream.send(buildChatRagFrame(frame.sessionId, res.injection));
+                      log.info?.(`[voice] 动态调整注入 ChatRAGText：${res.adjustment ?? 'rescue'}（${frame.sessionId}）`);
+                    } catch (e) {
+                      log.error('[voice] ChatRAGText injection failed:', e.message);
+                    }
+                  })
+                  .catch((e) => log.error('[voice] asr handling failed:', e.message));
               }
             } else if (frame.event === EV_LLM) {
               const content = frame.payloadJson?.content;
@@ -487,14 +535,18 @@ const isMain =
 if (isMain) {
   const cfg = readVoiceConfig();
   const port = Number(process.env.VOICE_PORT) || 8780;
-  // 真实使用接线：本地档案库 + 文本 LLM（有 key 真实、无 key 兜底）+ 检索层
-  const store = new ArchiveStore(path.join(process.cwd(), 'data', 'voice'));
+  // 数据目录：优先 VOICE_DATA_DIR（.env.voice.local），默认 data/voice
+  // 路径 A 设为 data/demo 以复用网关演示数据（公司/岗位/简历画像）
+  const voiceEnv = loadEnvFile(DEFAULT_ENV_FILE);
+  const dataDir = voiceEnv.VOICE_DATA_DIR || process.env.VOICE_DATA_DIR || 'data/voice';
+  const store = new ArchiveStore(path.resolve(process.cwd(), dataDir));
   const llm = createLlmFromEnv(process.env, path.join(process.cwd(), '.env.local'));
-  const search = createSearchProviderFromEnv(process.env);
+  const search = createSearchProviderFromEnv(process.env, null, llm);
   const coordination = createVoiceCoordination({ store, llm, search });
   const { url } = await startVoiceServer({ port, config: cfg, coordination });
   const mode = cfg.mock ? 'Mock（本地模拟，无需真实凭据）' : cfg.appId ? '真实服务（服务端凭据）' : '真实服务（等待页面填写凭据）';
   console.log(`[voice] 已启动: ${url}/voice/call.html  [${mode}]`);
+  console.log(`[voice] 数据目录：${path.resolve(process.cwd(), dataDir)}`);
   console.log(`[voice] 文本 LLM：${llm ? '已接线（真实模型）' : '未配置，走规则兜底'}；检索层：${search.name}`);
   console.log('[voice] 浏览器打开上面的地址，点击“开始通话”即可联调。');
 }

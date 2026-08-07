@@ -31,7 +31,7 @@ test('简历补全：结果带时间戳/来源/置信度入 round1 缓存', asyn
   const company = store.createCompany({ name: '星辰科技' });
   const result = await enrichResume({
     store,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     resumeProfile: { companies: ['星辰科技'], skills: [{ name: 'Redis' }] },
     companyId: company.companyId,
     roundKey: 'round1',
@@ -51,7 +51,7 @@ test('JD 补全：入 round2 缓存，未绑定公司时跳过', async (t) => {
   const company = store.createCompany({ name: '星辰科技' });
   const result = await enrichJd({
     store,
-    search: createSearchProvider({ provider: 'mock' }),
+    search: createSearchProvider(),
     jobProfile: { companyName: '星辰科技', responsibilities: ['负责订单系统设计'] },
     companyId: company.companyId,
     roundKey: 'round2',

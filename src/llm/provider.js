@@ -1,26 +1,29 @@
 // 文本 LLM 的统一入口。
 //
-// 先按 OpenAI 兼容的 chat completions 协议实现（DeepSeek / 通义 /
-// 豆包 Ark 都兼容这个协议，只是 baseUrl 和 model 不同），后面要换 provider
-// 只改这里的工厂函数。
-export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model = 'deepseek-chat' } = {}) {
+// 双协议支持：
+//   - Chat Completions（/chat/completions）：DeepSeek / 豆包 Ark 均兼容，默认路径
+//   - Responses API（/responses）：豆包 Ark 专属，启用 webSearch 时走此路径
+//     → 内置 web_search 工具，LLM 自动联网搜索 + 理解，替代外部 SerpAPI
+//
+// 供应商自动识别：baseUrl 含 volces.com 判为豆包 Ark，支持 Responses API。
+export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model = 'deepseek-v4-pro' } = {}) {
   if (!apiKey) {
     // 没有 key 的时候返回 null，上层解析器会自动走规则兜底，
     // 这样本地没有 key 也能把整条流水线跑通。
     return null;
   }
 
+  const isArk = /volces\.com|ark\./i.test(baseUrl);
+
+  // ---- Chat Completions 路径（DeepSeek / 豆包 Ark 通用）----
   async function chatOnce(messages, { temperature, maxTokens, timeoutMs = 120000 }, useJsonMode) {
     const body = {
       model,
       messages,
       temperature,
     };
-    // 官方 JSON 模式文档强调要合理设置 max_tokens，防止长 JSON 被截断
     if (maxTokens) body.max_tokens = maxTokens;
     if (useJsonMode) {
-      // 让模型尽量输出纯 JSON；个别 provider 要求提示词里必须出现 json 字样，
-      // 或干脆不支持这个字段（会 400），此时由 chat() 摘掉该字段重试。
       body.response_format = { type: 'json_object' };
     }
     const res = await fetch(`${baseUrl}/chat/completions`, {
@@ -43,12 +46,74 @@ export function createLlm({ apiKey, baseUrl = 'https://api.deepseek.com', model 
     return data.choices?.[0]?.message?.content ?? '';
   }
 
-  async function chat(messages, { temperature = 0.2, maxTokens, timeoutMs = 120000 } = {}) {
+  // ---- Responses API 路径（豆包 Ark 专属，支持 web_search 内置工具）----
+  async function responsesOnce(messages, { temperature, maxTokens, timeoutMs = 120000, webSearch }) {
+    // Chat messages → Responses API 格式：system 消息提升为 instructions，其余进 input
+    const systemMsgs = messages.filter((m) => m.role === 'system');
+    const nonSystemMsgs = messages.filter((m) => m.role !== 'system');
+    const instructions = systemMsgs.map((m) => m.content).join('\n') || undefined;
+
+    const body = {
+      model,
+      input: nonSystemMsgs.map((m) => ({ role: m.role, content: m.content })),
+      temperature,
+    };
+    if (instructions) body.instructions = instructions;
+    if (maxTokens) body.max_tokens = maxTokens;
+    if (webSearch) {
+      // 内置联网搜索工具：LLM 自动判断是否需要搜索，无需手动触发
+      body.tools = [{ type: 'web_search', max_keyword: 3 }];
+    }
+    const res = await fetch(`${baseUrl}/responses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      const err = new Error(`llm responses api error ${res.status}: ${text}`);
+      err.status = res.status;
+      err.body = text;
+      throw err;
+    }
+    const data = await res.json();
+    return extractResponsesText(data);
+  }
+
+  /** 从 Responses API 响应中提取文本输出。 */
+  function extractResponsesText(data) {
+    // 标准格式：output[].content[].text
+    const outputItems = data.output ?? [];
+    for (const item of outputItems) {
+      if (item.type === 'message' && Array.isArray(item.content)) {
+        const text = item.content
+          .filter((c) => c.type === 'output_text' && c.text)
+          .map((c) => c.text)
+          .join('\n');
+        if (text) return text;
+      }
+    }
+    // 兜底：直接取 output_text 字段（部分版本简化格式）
+    if (typeof data.output_text === 'string') return data.output_text;
+    return '';
+  }
+
+  async function chat(messages, { temperature = 0.2, maxTokens, timeoutMs = 120000, webSearch = false } = {}) {
+    // webSearch 仅豆包 Ark 支持（Responses API + web_search 工具）
+    if (webSearch && isArk) {
+      try {
+        return await responsesOnce(messages, { temperature, maxTokens, timeoutMs, webSearch: true });
+      } catch (err) {
+        // Responses API 失败时降级为 Chat API（不联网），上层可继续处理
+      }
+    }
     try {
       return await chatOnce(messages, { temperature, maxTokens, timeoutMs }, true);
     } catch (err) {
-      // response_format 不是所有 OpenAI 兼容端点都支持（部分会 400），
-      // 摘掉该字段重试一次；JSON 解析由上层 parseJsonFromText/chatJson 兜底。
       if (err.status === 400 && /response_format|json_object/i.test(err.body || '')) {
         return chatOnce(messages, { temperature, maxTokens, timeoutMs }, false);
       }

@@ -30,6 +30,19 @@
   .sys { color: #777; font-size: 12px; }
   .hint { font-size: 12px; color: #666; margin-top: 8px; }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  /* 准备好的面试卡片 */
+  .ready-item { border: 1px solid #e0e0e8; border-radius: 10px; padding: 12px 14px; margin: 8px 0; cursor: pointer; transition: all .15s; background: #fff; }
+  .ready-item:hover { border-color: #2b6cff; box-shadow: 0 1px 6px rgba(43,108,255,.12); }
+  .ready-item.selected { border-color: #2b6cff; background: #eef4ff; box-shadow: 0 0 0 2px rgba(43,108,255,.25); }
+  .ready-item .title { font-size: 15px; font-weight: 600; }
+  .ready-item .sub { font-size: 12px; color: #777; margin-top: 2px; }
+  .ready-item .rounds { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .round-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eee; color: #555; }
+  .round-chip.practiced { background: #c7eecb; color: #1b5e20; }
+  .round-chip.recommend { background: #2b6cff; color: #fff; }
+  .empty { text-align: center; color: #999; padding: 24px; font-size: 13px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; font-size: 12px; color: #666; }
 </style>
 </head>
 <body>
@@ -43,24 +56,30 @@
   <div class="hint">凭据仅存在本机 localStorage，仅发给本地代理，代理负责注入鉴权 header。</div>
 </div>
 
-<div class="card" id="sessionCard">
-  <label>公司 ID（档案库 companyId）</label>
-  <input id="companyId" placeholder="c_1" autocomplete="off">
-  <label>岗位 ID（档案库 positionId）</label>
-  <input id="positionId" placeholder="p_1" autocomplete="off">
+<div class="card" id="readyCard">
+  <div style="font-size:14px;font-weight:600;margin-bottom:4px;">准备好的面试</div>
+  <div class="hint" style="margin-top:0;margin-bottom:8px;">在手机 APP 里上传简历、粘贴 JD、投递岗位后，这里会自动出现可练的面试。点选一项即可开始。</div>
+  <div id="readyList"><div class="empty">加载中…</div></div>
+</div>
+
+<div class="card" id="sessionCard" hidden>
+  <div id="sessionTitle" style="font-size:15px;font-weight:600;"></div>
+  <div id="sessionSub" class="hint" style="margin-top:2px;"></div>
   <label>面试轮次</label>
-  <select id="roundKey">
-    <option value="round1" selected>一面（简历面）</option>
+  <select id="roundKey" style="width:100%;box-sizing:border-box;padding:7px;margin:3px 0 0;border:1px solid #ccc;border-radius:6px;font-size:13px;">
+    <option value="round1">一面（简历面）</option>
     <option value="round2">二面（业务面）</option>
     <option value="round3">三面（总监交叉面）</option>
   </select>
-  <label>Mock ASR 文本（可选，仅 mock 模式调试用）</label>
-  <input id="mockAsrText" placeholder="（留空则用默认模拟文本）" autocomplete="off">
+  <details>
+    <summary>高级：Mock ASR 文本（仅 mock 模式调试用）</summary>
+    <input id="mockAsrText" placeholder="（留空则用默认模拟文本）" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px;margin:6px 0 0;border:1px solid #ccc;border-radius:6px;font-size:13px;">
+  </details>
   <div class="hint">开启语音面试时会先创建预分析会话，System Prompt 按公司/岗位/轮次动态注入。</div>
 </div>
 
 <div class="row">
-  <button id="connect">开始通话</button>
+  <button id="connect" disabled>开始通话</button>
   <button id="hangup" class="danger" disabled>挂断</button>
 </div>
 

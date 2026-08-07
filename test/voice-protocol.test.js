@@ -4,6 +4,7 @@ import zlib from 'node:zlib';
 
 import {
   buildAudioFrame,
+  buildChatRagFrame,
   buildControlFrame,
   parseFrame,
   SP_COMPRESS_GZIP,
@@ -15,6 +16,7 @@ import {
   SP_SERIAL_JSON,
   SP_SERIAL_NONE,
   EV_AUDIO,
+  EV_CHAT_RAG_TEXT,
   EV_START_CONNECTION,
   EV_START_SESSION,
 } from '../src/voice/protocol.js';
@@ -110,4 +112,21 @@ test('服务端错误帧：解析 code 与 error 文本', async () => {
   assert.equal(parsed.messageType, SP_SERVER_ERROR);
   assert.equal(parsed.code, 12345);
   assert.deepEqual(parsed.error, { error: 'bad config' });
+});
+
+test('ChatRAGText 帧：event=502，payload 含 external_rag JSON 字符串', async () => {
+  const sid = 'rag-sid-1';
+  const ragItems = [
+    { title: '面试官调整提示', content: '候选人偏题，请拉回主线。' },
+  ];
+  const frame = buildChatRagFrame(sid, ragItems);
+  const parsed = await parseFrame(frame);
+  assert.equal(parsed.event, EV_CHAT_RAG_TEXT);
+  assert.equal(parsed.sessionId, sid);
+  assert.ok(parsed.payloadJson, 'payload 解析为 JSON');
+  assert.ok(typeof parsed.payloadJson.external_rag === 'string', 'external_rag 为字符串');
+  const rag = JSON.parse(parsed.payloadJson.external_rag);
+  assert.ok(Array.isArray(rag) && rag.length === 1, 'RAG 条目为数组');
+  assert.equal(rag[0].title, '面试官调整提示');
+  assert.equal(rag[0].content, '候选人偏题，请拉回主线。');
 });
